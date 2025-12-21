@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
+import { ToastProvider } from '../utils/toastManager';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,22 +53,29 @@ export default function RootLayout() {
 
   if (!fontsLoaded || !isInitialized || !themeReady || !theme) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-        <ActivityIndicator size="large" color="#4285F4" />
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        backgroundColor: theme?.colors.background || '#FFFFFF' 
+      }}>
+        <ActivityIndicator size="large" color={theme?.colors.primary || '#4285F4'} />
       </View>
     );
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="auth" />
-        <Stack.Screen name="group" />
-        <Stack.Screen name="join-group" />
-        <Stack.Screen name="profile" />
-      </Stack>
+      <ToastProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth" />
+          <Stack.Screen name="group" />
+          <Stack.Screen name="join-group" />
+          <Stack.Screen name="profile" />
+        </Stack>
+      </ToastProvider>
     </GestureHandlerRootView>
   );
 }

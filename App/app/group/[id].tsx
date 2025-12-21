@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   Image,
-  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +18,7 @@ import { useGroupStore } from '../../stores/groupStore';
 import { useExpenseStore } from '../../stores/expenseStore';
 import { useTimelineStore } from '../../stores/timelineStore';
 import { useExpenseLogStore } from '../../stores/expenseLogStore';
+import { useToast } from '../../utils/toastManager';
 import { useGroupMembers } from '../../hooks/useGroupMembers';
 import { MemberAvatar } from '../../components/ui/MemberAvatar';
 import { ExpenseItem } from '../../components/ui/ExpenseItem';
@@ -42,6 +42,7 @@ export default function GroupDetailScreen() {
   const { expenses, fetchGroupExpenses } = useExpenseStore();
   const { events, fetchGroupTimeline } = useTimelineStore();
   const { logs, fetchGroupLogs } = useExpenseLogStore();
+  const { showToast } = useToast();
   const { members } = useGroupMembers(id);
   
   const [activeTab, setActiveTab] = useState<Tab>('expense');
@@ -61,14 +62,15 @@ export default function GroupDetailScreen() {
   if (!currentGroup) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Text style={[styles.loading, { color: theme.colors.text }]}>Loading...</Text>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loading, { color: theme.colors.textPrimary }]}>Loading...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   const isAdmin = currentGroup.adminId === user?.uid;
   const emoji = getGroupTypeEmoji(currentGroup.type);
-  const gradientColors = getGradientColors(theme.colors.primary);
 
   const handleInvite = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -76,6 +78,11 @@ export default function GroupDetailScreen() {
       pathname: '/group/invite/[id]',
       params: { id: currentGroup.id }
     });
+  };
+
+  const handleSettings = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    showToast('Settings coming soon', 'info');
   };
 
   const handleTabChange = async (tab: Tab) => {
@@ -99,9 +106,9 @@ export default function GroupDetailScreen() {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={['top']}
     >
-      {/* Compact Header with Gradient */}
+      {/* Enhanced Header with Gradient */}
       <LinearGradient
-        colors={gradientColors}
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
@@ -115,35 +122,41 @@ export default function GroupDetailScreen() {
             <TouchableOpacity onPress={handleInvite} style={styles.iconButton}>
               <MaterialIcons name="person-add" size={22} color="#FFFFFF" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => Alert.alert('Settings', 'Coming soon!')} style={styles.iconButton}>
-              <MaterialIcons name="more-vert" size={22} color="#FFFFFF" />
+            <TouchableOpacity onPress={handleSettings} style={styles.iconButton}>
+              <MaterialIcons name="settings" size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.headerContent}>
-          {currentGroup.photo ? (
-            <Image source={{ uri: currentGroup.photo }} style={styles.groupPhoto} />
-          ) : (
-            <View style={styles.groupPhotoPlaceholder}>
-              <Text style={styles.groupEmoji}>{emoji}</Text>
-            </View>
-          )}
-          
-          <View style={styles.headerInfo}>
-            <Text style={styles.groupName} numberOfLines={1}>
-              {currentGroup.name}
-            </Text>
-            <View style={styles.groupMeta}>
-              <MaterialIcons name="people" size={14} color="rgba(255,255,255,0.9)" />
-              <Text style={styles.groupMetaText}>
-                {currentGroup.memberCount} members • {currentGroup.type}
+        <MotiView
+          from={{ opacity: 0, translateY: -10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400 }}
+        >
+          <View style={styles.headerContent}>
+            {currentGroup.photo ? (
+              <Image source={{ uri: currentGroup.photo }} style={styles.groupPhoto} />
+            ) : (
+              <View style={styles.groupPhotoPlaceholder}>
+                <Text style={styles.groupEmoji}>{emoji}</Text>
+              </View>
+            )}
+            
+            <View style={styles.headerInfo}>
+              <Text style={styles.groupName} numberOfLines={1}>
+                {currentGroup.name}
               </Text>
+              <View style={styles.groupMeta}>
+                <MaterialIcons name="people" size={14} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.groupMetaText}>
+                  {currentGroup.memberCount} members • {currentGroup.type}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
+        </MotiView>
 
-        {/* Stats Row */}
+        {/* Enhanced Stats Row */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>
@@ -185,7 +198,7 @@ export default function GroupDetailScreen() {
       </LinearGradient>
 
       {/* Modern Tabs */}
-      <View style={[styles.tabsContainer, { backgroundColor: theme.colors.card }]}>
+      <View style={[styles.tabsContainer, { backgroundColor: theme.colors.cardBackground }]}>
         {(['expense', 'members', 'timeline', 'activity'] as Tab[]).map((tab) => (
           <TouchableOpacity
             key={tab}
@@ -212,6 +225,7 @@ export default function GroupDetailScreen() {
                 styles.tabText,
                 {
                   color: activeTab === tab ? theme.colors.primary : theme.colors.textSecondary,
+                  fontWeight: activeTab === tab ? '700' : '600',
                 },
               ]}
             >
@@ -233,8 +247,8 @@ export default function GroupDetailScreen() {
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 300 }}
           >
-            {/* Expense Type Filter */}
-            <View style={[styles.filterContainer, { backgroundColor: theme.colors.card }]}>
+            {/* Enhanced Expense Filter */}
+            <View style={[styles.filterContainer, { backgroundColor: theme.colors.cardBackground }]}>
               <TouchableOpacity
                 style={[
                   styles.filterButton,
@@ -245,6 +259,11 @@ export default function GroupDetailScreen() {
                 ]}
                 onPress={() => setExpenseFilter('personal')}
               >
+                <MaterialIcons 
+                  name="person" 
+                  size={18} 
+                  color={expenseFilter === 'personal' ? '#FFFFFF' : theme.colors.textSecondary} 
+                />
                 <Text
                   style={[
                     styles.filterText,
@@ -265,6 +284,11 @@ export default function GroupDetailScreen() {
                 ]}
                 onPress={() => setExpenseFilter('shared')}
               >
+                <MaterialIcons 
+                  name="group" 
+                  size={18} 
+                  color={expenseFilter === 'shared' ? '#FFFFFF' : theme.colors.textSecondary} 
+                />
                 <Text
                   style={[
                     styles.filterText,
@@ -281,15 +305,21 @@ export default function GroupDetailScreen() {
               <EmptyState
                 icon={expenseFilter === 'personal' ? 'person' : 'group'}
                 title={`No ${expenseFilter === 'personal' ? 'Personal' : 'Shared'} Expenses`}
-                description={`Add your first ${expenseFilter} expense`}
+                description={`Add your first ${expenseFilter} expense to get started`}
               />
             ) : (
-              filteredExpenses.map((expense) => (
-                <ExpenseItem
+              filteredExpenses.map((expense, index) => (
+                <MotiView
                   key={expense.id}
-                  expense={expense}
-                  onPress={() => Alert.alert('Expense Details', 'Coming soon!')}
-                />
+                  from={{ opacity: 0, translateX: -20 }}
+                  animate={{ opacity: 1, translateX: 0 }}
+                  transition={{ type: 'timing', delay: index * 50, duration: 300 }}
+                >
+                  <ExpenseItem
+                    expense={expense}
+                    onPress={() => showToast('Expense details coming soon', 'info')}
+                  />
+                </MotiView>
               ))
             )}
           </MotiView>
@@ -301,36 +331,42 @@ export default function GroupDetailScreen() {
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 300 }}
           >
-            {members.map((member) => (
-              <View
+            {members.map((member, index) => (
+              <MotiView
                 key={member.userId}
-                style={[
-                  styles.memberCard,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
+                from={{ opacity: 0, translateX: -20 }}
+                animate={{ opacity: 1, translateX: 0 }}
+                transition={{ type: 'timing', delay: index * 50, duration: 300 }}
               >
-                <MemberAvatar
-                  name={member.userName}
-                  photo={member.userProfilePicture}
-                  size="medium"
-                />
-                <View style={styles.memberInfo}>
-                  <Text style={[styles.memberName, { color: theme.colors.text }]}>
-                    {member.userName}
-                  </Text>
-                  <Text style={[styles.memberRole, { color: theme.colors.textSecondary }]}>
-                    {member.role === 'admin' ? 'Admin' : 'Member'}
-                  </Text>
-                </View>
-                {member.role === 'admin' && (
-                  <View style={[styles.adminBadge, { backgroundColor: theme.colors.primary }]}>
-                    <MaterialIcons name="verified" size={16} color="#FFFFFF" />
+                <View
+                  style={[
+                    styles.memberCard,
+                    {
+                      backgroundColor: theme.colors.cardBackground,
+                      borderColor: theme.colors.cardBorder,
+                    },
+                  ]}
+                >
+                  <MemberAvatar
+                    name={member.userName}
+                    photo={member.userProfilePicture}
+                    size="medium"
+                  />
+                  <View style={styles.memberInfo}>
+                    <Text style={[styles.memberName, { color: theme.colors.textPrimary }]}>
+                      {member.userName}
+                    </Text>
+                    <Text style={[styles.memberRole, { color: theme.colors.textSecondary }]}>
+                      {member.role === 'admin' ? 'Admin' : 'Member'}
+                    </Text>
                   </View>
-                )}
-              </View>
+                  {member.role === 'admin' && (
+                    <View style={[styles.adminBadge, { backgroundColor: theme.colors.primary }]}>
+                      <MaterialIcons name="verified" size={16} color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
+              </MotiView>
             ))}
           </MotiView>
         )}
@@ -345,11 +381,18 @@ export default function GroupDetailScreen() {
               <EmptyState
                 icon="event"
                 title="No Events Yet"
-                description="Add milestones to your timeline"
+                description="Add milestones to track your journey together"
               />
             ) : (
-              events.map((event) => (
-                <TimelineEvent key={event.id} event={event} />
+              events.map((event, index) => (
+                <MotiView
+                  key={event.id}
+                  from={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: 'spring', delay: index * 50 }}
+                >
+                  <TimelineEvent event={event} />
+                </MotiView>
               ))
             )}
           </MotiView>
@@ -365,60 +408,78 @@ export default function GroupDetailScreen() {
               <EmptyState
                 icon="history"
                 title="No Activity Yet"
-                description="Activity will appear here"
+                description="All group activity will appear here"
               />
             ) : (
-              logs.map((log) => (
-                <View
+              logs.map((log, index) => (
+                <MotiView
                   key={log.id}
-                  style={[
-                    styles.activityCard,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
+                  from={{ opacity: 0, translateX: -20 }}
+                  animate={{ opacity: 1, translateX: 0 }}
+                  transition={{ type: 'timing', delay: index * 50, duration: 300 }}
                 >
-                  <View style={[styles.activityIcon, { backgroundColor: theme.colors.primary + '20' }]}>
-                    <MaterialIcons
-                      name={
-                        log.type === 'expense_added' ? 'add-circle' :
-                        log.type === 'expense_deleted' ? 'delete' :
-                        log.type === 'expense_settled' ? 'check-circle' :
-                        log.type === 'payment_made' ? 'payment' : 'edit'
-                      }
-                      size={20}
-                      color={theme.colors.primary}
-                    />
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={[styles.activityDesc, { color: theme.colors.text }]}>
-                      {log.description}
-                    </Text>
-                    {log.amount && (
-                      <Text style={[styles.activityAmount, { color: theme.colors.primary }]}>
-                        {formatCurrency(log.amount, log.currency || currentGroup.currency)}
+                  <View
+                    style={[
+                      styles.activityCard,
+                      {
+                        backgroundColor: theme.colors.cardBackground,
+                        borderColor: theme.colors.cardBorder,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.activityIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                      <MaterialIcons
+                        name={
+                          log.type === 'expense_added' ? 'add-circle' :
+                          log.type === 'expense_deleted' ? 'delete' :
+                          log.type === 'expense_settled' ? 'check-circle' :
+                          log.type === 'payment_made' ? 'payment' : 'edit'
+                        }
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text style={[styles.activityDesc, { color: theme.colors.textPrimary }]}>
+                        {log.description}
                       </Text>
-                    )}
-                    <Text style={[styles.activityTime, { color: theme.colors.textSecondary }]}>
-                      {log.createdAt.toDate().toLocaleString()}
-                    </Text>
+                      {log.amount && (
+                        <Text style={[styles.activityAmount, { color: theme.colors.primary }]}>
+                          {formatCurrency(log.amount, log.currency || currentGroup.currency)}
+                        </Text>
+                      )}
+                      <Text style={[styles.activityTime, { color: theme.colors.textMuted }]}>
+                        {log.createdAt.toDate().toLocaleString()}
+                      </Text>
+                    </View>
                   </View>
-                </View>
+                </MotiView>
               ))
             )}
           </MotiView>
         )}
       </ScrollView>
 
-      {/* Floating Action Button */}
+      {/* Enhanced FAB with Gradient */}
       {(activeTab === 'expense' || activeTab === 'timeline') && (
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          onPress={handleFabPress}
+        <MotiView
+          from={{ scale: 0, rotate: '-180deg' }}
+          animate={{ scale: 1, rotate: '0deg' }}
+          transition={{ type: 'spring', delay: 400 }}
         >
-          <MaterialIcons name="add" size={28} color="#FFFFFF" />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={handleFabPress}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={[theme.colors.fabBackground, theme.colors.secondary]}
+              style={styles.fabGradient}
+            >
+              <MaterialIcons name="add" size={28} color="#FFFFFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </MotiView>
       )}
 
       {/* Modals */}
@@ -446,30 +507,38 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  loading: {
+  loadingContainer: {
     flex: 1,
-    textAlign: 'center',
-    marginTop: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loading: {
     fontSize: 16,
+    fontWeight: '500',
   },
   headerGradient: {
     paddingTop: 12,
-    paddingBottom: 16,
+    paddingBottom: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -481,7 +550,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -489,75 +558,88 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   groupPhoto: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     marginRight: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   groupPhotoPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   groupEmoji: {
-    fontSize: 24,
+    fontSize: 28,
   },
   headerInfo: {
     flex: 1,
   },
   groupName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   groupMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   groupMetaText: {
-    fontSize: 12,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.9)',
     textTransform: 'capitalize',
+    fontWeight: '500',
   },
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.2)',
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   statLabel: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
   },
   statDivider: {
     width: 1,
-    height: 30,
+    height: 36,
     backgroundColor: 'rgba(255,255,255,0.2)',
+    marginHorizontal: 8,
   },
   tabsContainer: {
     flexDirection: 'row',
-    padding: 8,
+    padding: 6,
     gap: 6,
     marginHorizontal: 16,
     marginTop: 16,
-    borderRadius: 12,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tabButton: {
     flex: 1,
@@ -565,19 +647,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   tabButtonActive: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   tabText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
   },
   content: {
     flex: 1,
@@ -589,22 +670,30 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: 'row',
     padding: 4,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 16,
-    gap: 4,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   filterButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   filterButtonActive: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   filterText: {
     fontSize: 14,
@@ -617,6 +706,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   memberInfo: {
     flex: 1,
@@ -625,10 +719,11 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   memberRole: {
     fontSize: 13,
+    fontWeight: '500',
   },
   adminBadge: {
     width: 32,
@@ -636,6 +731,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   activityCard: {
     flexDirection: 'row',
@@ -643,11 +743,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -658,15 +763,17 @@ const styles = StyleSheet.create({
   activityDesc: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 20,
   },
   activityAmount: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   activityTime: {
     fontSize: 12,
+    fontWeight: '500',
   },
   fab: {
     position: 'absolute',
@@ -675,12 +782,17 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabGradient: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 });

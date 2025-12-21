@@ -8,26 +8,37 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useState } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useGroupStore } from '../../stores/groupStore';
+import { useToast } from '../../utils/toastManager';
 import { MotiView } from 'moti';
 import { Group } from '../../lib/schema';
+import * as Haptics from 'expo-haptics';
 
 const GROUP_TYPES: Group['type'][] = ['trip', 'project', 'household', 'event'];
 const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD'];
+
+const TYPE_ICONS: Record<Group['type'], keyof typeof MaterialIcons.glyphMap> = {
+  trip: 'flight',
+  project: 'work',
+  household: 'home',
+  event: 'event',
+};
 
 export default function CreateGroupScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { theme } = useThemeStore();
   const { createGroup, loading } = useGroupStore();
+  const { showToast } = useToast();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -36,13 +47,20 @@ export default function CreateGroupScreen() {
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a group name');
+      showToast('Please enter a group name', 'error');
+      return;
+    }
+
+    if (name.trim().length < 3) {
+      showToast('Group name must be at least 3 characters', 'error');
       return;
     }
 
     if (!user) return;
 
     try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
       const groupId = await createGroup(
         user.uid,
         name.trim(),
@@ -51,14 +69,12 @@ export default function CreateGroupScreen() {
         description.trim()
       );
       
-      Alert.alert('Success', 'Group created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.replace(`/group/${groupId}` as any),
-        },
-      ]);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Group created successfully!', 'success');
+      router.replace(`/group/${groupId}` as any);
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast(error.message || 'Failed to create group', 'error');
     }
   };
 
@@ -71,20 +87,28 @@ export default function CreateGroupScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <MaterialIcons name="close" size={28} color={theme.colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-            Create Group
-          </Text>
-          <View style={{ width: 28 }} />
-        </View>
+        {/* Header with Gradient */}
+        <LinearGradient
+          colors={[theme.colors.gradientStart + '15', theme.colors.background]}
+          style={styles.headerGradient}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+              <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              Create Group
+            </Text>
+            
+            <View style={{ width: 40 }} />
+          </View>
+        </LinearGradient>
 
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           <MotiView
             from={{ opacity: 0, translateY: 20 }}
@@ -93,42 +117,45 @@ export default function CreateGroupScreen() {
           >
             {/* Group Name */}
             <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
                 Group Name *
               </Text>
-              <TextInput
+              <View
                 style={[
-                  styles.input,
+                  styles.inputContainer,
                   {
-                    backgroundColor: theme.colors.surface,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.inputBackground,
+                    borderColor: theme.colors.inputBorder,
                   },
                 ]}
-                placeholder="e.g., Trip to Goa"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={name}
-                onChangeText={setName}
-              />
+              >
+                <MaterialIcons name="group" size={20} color={theme.colors.textMuted} />
+                <TextInput
+                  style={[styles.input, { color: theme.colors.inputText }]}
+                  placeholder="e.g., Trip to Goa"
+                  placeholderTextColor={theme.colors.inputPlaceholder}
+                  value={name}
+                  onChangeText={setName}
+                />
+              </View>
             </View>
 
             {/* Description */}
             <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
                 Description (Optional)
               </Text>
               <TextInput
                 style={[
-                  styles.input,
                   styles.textArea,
                   {
-                    backgroundColor: theme.colors.surface,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.inputBackground,
+                    color: theme.colors.inputText,
+                    borderColor: theme.colors.inputBorder,
                   },
                 ]}
                 placeholder="Add details about this group..."
-                placeholderTextColor={theme.colors.textSecondary}
+                placeholderTextColor={theme.colors.inputPlaceholder}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -138,7 +165,7 @@ export default function CreateGroupScreen() {
 
             {/* Group Type */}
             <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
                 Group Type
               </Text>
               <View style={styles.typeGrid}>
@@ -151,15 +178,24 @@ export default function CreateGroupScreen() {
                         backgroundColor:
                           type === groupType
                             ? theme.colors.primary + '20'
-                            : theme.colors.surface,
+                            : theme.colors.cardBackground,
                         borderColor:
                           type === groupType
                             ? theme.colors.primary
-                            : theme.colors.border,
+                            : theme.colors.cardBorder,
                       },
                     ]}
-                    onPress={() => setType(groupType)}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setType(groupType);
+                    }}
+                    activeOpacity={0.7}
                   >
+                    <MaterialIcons
+                      name={TYPE_ICONS[groupType]}
+                      size={24}
+                      color={type === groupType ? theme.colors.primary : theme.colors.textMuted}
+                    />
                     <Text
                       style={[
                         styles.typeText,
@@ -167,7 +203,7 @@ export default function CreateGroupScreen() {
                           color:
                             type === groupType
                               ? theme.colors.primary
-                              : theme.colors.text,
+                              : theme.colors.textPrimary,
                         },
                       ]}
                     >
@@ -180,7 +216,7 @@ export default function CreateGroupScreen() {
 
             {/* Currency */}
             <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
                 Currency
               </Text>
               <ScrollView
@@ -197,21 +233,26 @@ export default function CreateGroupScreen() {
                         backgroundColor:
                           currency === curr
                             ? theme.colors.primary
-                            : theme.colors.surface,
+                            : theme.colors.cardBackground,
                         borderColor:
                           currency === curr
                             ? theme.colors.primary
-                            : theme.colors.border,
+                            : theme.colors.cardBorder,
                       },
                     ]}
-                    onPress={() => setCurrency(curr)}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setCurrency(curr);
+                    }}
+                    activeOpacity={0.7}
                   >
                     <Text
                       style={[
                         styles.currencyText,
                         {
                           color:
-                            currency === curr ? '#FFFFFF' : theme.colors.text,
+                            currency === curr ? '#FFFFFF' : theme.colors.textPrimary,
+                          fontWeight: currency === curr ? '700' : '600',
                         },
                       ]}
                     >
@@ -224,19 +265,29 @@ export default function CreateGroupScreen() {
           </MotiView>
         </ScrollView>
 
-        {/* Create Button */}
-        <View style={styles.footer}>
+        {/* Create Button with Gradient */}
+        <View style={[styles.footer, { backgroundColor: theme.colors.background }]}>
           <TouchableOpacity
-            style={[
-              styles.createButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
             onPress={handleCreate}
             disabled={loading}
+            activeOpacity={0.8}
           >
-            <Text style={styles.createButtonText}>
-              {loading ? 'Creating...' : 'Create Group'}
-            </Text>
+            <LinearGradient
+              colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+              style={[
+                styles.createButton,
+                loading && { opacity: 0.7 },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.createButtonText}>Create Group</Text>
+                  <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                </>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -251,6 +302,9 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
+  headerGradient: {
+    paddingBottom: 12,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -258,13 +312,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 16,
   },
+  headerButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
   },
   content: {
     paddingHorizontal: 24,
-    paddingBottom: 100,
+    paddingTop: 8,
+    paddingBottom: 120,
   },
   section: {
     marginBottom: 24,
@@ -274,16 +335,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
   },
-  input: {
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     height: 56,
     borderRadius: 16,
     paddingHorizontal: 16,
-    fontSize: 16,
+    gap: 12,
     borderWidth: 1,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
   },
   textArea: {
     height: 120,
+    borderRadius: 16,
+    paddingHorizontal: 16,
     paddingTop: 16,
+    fontSize: 16,
+    borderWidth: 1,
     textAlignVertical: 'top',
   },
   typeGrid: {
@@ -294,28 +366,33 @@ const styles = StyleSheet.create({
   typeButton: {
     flex: 1,
     minWidth: '45%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 2,
-    alignItems: 'center',
   },
   typeText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
   currencyRow: {
-    gap: 12,
+    gap: 10,
+    paddingRight: 24,
   },
   currencyButton: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 2,
+    minWidth: 70,
+    alignItems: 'center',
   },
   currencyText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
   },
   footer: {
     position: 'absolute',
@@ -324,12 +401,24 @@ const styles = StyleSheet.create({
     right: 0,
     padding: 24,
     paddingBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   createButton: {
+    flexDirection: 'row',
     height: 56,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
   createButtonText: {
     color: '#FFFFFF',

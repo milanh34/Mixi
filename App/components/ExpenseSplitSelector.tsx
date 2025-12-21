@@ -8,10 +8,13 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { useThemeStore } from '../stores/themeStore';
 import { GroupMember } from '../lib/schema';
 import { MemberAvatar } from './ui/MemberAvatar';
+import { MotiView } from 'moti';
+import * as Haptics from 'expo-haptics';
 
 interface SplitDetails {
   userId: string;
@@ -96,79 +99,105 @@ export function ExpenseSplitSelector({
     return Math.abs(total - totalAmount) < 0.01; // Allow 1 paisa difference for rounding
   };
 
+  const splitTypes = [
+    { id: 'equal', label: 'Equal', icon: 'group' },
+    { id: 'shares', label: 'Shares', icon: 'pie-chart' },
+    { id: 'percent', label: 'Percent', icon: 'percent' },
+    { id: 'exact', label: 'Exact', icon: 'calculate' },
+  ];
+
   return (
     <View style={styles.container}>
       {/* Split Type Selector */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: theme.colors.text }]}>
-          Split Type
-        </Text>
+        <View style={styles.labelRow}>
+          <MaterialIcons name="pie-chart" size={18} color={theme.colors.primary} />
+          <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+            Split Type
+          </Text>
+        </View>
+        
         <View style={styles.typeRow}>
-          {[
-            { id: 'equal', label: 'Equal', icon: 'group' },
-            { id: 'shares', label: 'Shares', icon: 'pie-chart' },
-            { id: 'percent', label: 'Percent', icon: 'percent' },
-            { id: 'exact', label: 'Exact', icon: 'calculate' },
-          ].map((type) => (
-            <TouchableOpacity
+          {splitTypes.map((type, index) => (
+            <MotiView
               key={type.id}
-              style={[
-                styles.typeButton,
-                {
-                  backgroundColor:
-                    splitType === type.id
-                      ? theme.colors.primary + '20'
-                      : theme.colors.surface,
-                  borderColor:
-                    splitType === type.id
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                },
-              ]}
-              onPress={() => onSplitTypeChange(type.id as any)}
+              from={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', duration: 400, delay: index * 50 }}
+              style={{ flex: 1 }}
             >
-              <MaterialIcons
-                name={type.icon as any}
-                size={20}
-                color={
-                  splitType === type.id ? theme.colors.primary : theme.colors.text
-                }
-              />
-              <Text
+              <TouchableOpacity
                 style={[
-                  styles.typeText,
+                  styles.typeButton,
                   {
-                    color:
+                    backgroundColor:
+                      splitType === type.id
+                        ? theme.colors.primary + '20'
+                        : theme.colors.cardBackground,
+                    borderColor:
                       splitType === type.id
                         ? theme.colors.primary
-                        : theme.colors.text,
+                        : theme.colors.cardBorder,
                   },
                 ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  onSplitTypeChange(type.id as any);
+                }}
+                activeOpacity={0.7}
               >
-                {type.label}
-              </Text>
-            </TouchableOpacity>
+                <MaterialIcons
+                  name={type.icon as any}
+                  size={20}
+                  color={
+                    splitType === type.id ? theme.colors.primary : theme.colors.textMuted
+                  }
+                />
+                <Text
+                  style={[
+                    styles.typeText,
+                    {
+                      color:
+                        splitType === type.id
+                          ? theme.colors.primary
+                          : theme.colors.textPrimary,
+                    },
+                  ]}
+                >
+                  {type.label}
+                </Text>
+              </TouchableOpacity>
+            </MotiView>
           ))}
         </View>
       </View>
 
       {/* Member Split Details */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: theme.colors.text }]}>
-          Split Details
-        </Text>
+        <View style={styles.labelRow}>
+          <MaterialIcons name="people" size={18} color={theme.colors.primary} />
+          <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+            Split Details
+          </Text>
+        </View>
         
-        <ScrollView style={styles.membersList}>
-          {members.map((member) => {
+        <ScrollView style={styles.membersList} showsVerticalScrollIndicator={false}>
+          {members.map((member, index) => {
             const detail = splitDetails.find((d) => d.userId === member.userId);
             const amount = calculateIndividualAmount(member.userId);
 
             return (
-              <View
+              <MotiView
                 key={member.userId}
+                from={{ opacity: 0, translateX: -20 }}
+                animate={{ opacity: 1, translateX: 0 }}
+                transition={{ type: 'timing', duration: 300, delay: index * 50 }}
                 style={[
                   styles.memberRow,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  {
+                    backgroundColor: theme.colors.cardBackground,
+                    borderColor: theme.colors.cardBorder,
+                  },
                 ]}
               >
                 <View style={styles.memberInfo}>
@@ -178,12 +207,15 @@ export function ExpenseSplitSelector({
                     size="small"
                   />
                   <View style={styles.memberText}>
-                    <Text style={[styles.memberName, { color: theme.colors.text }]}>
+                    <Text style={[styles.memberName, { color: theme.colors.textPrimary }]}>
                       {member.userName}
                     </Text>
-                    <Text style={[styles.memberAmount, { color: theme.colors.textSecondary }]}>
-                      ₹{amount.toFixed(2)}
-                    </Text>
+                    <View style={styles.amountRow}>
+                      <MaterialIcons name="currency-rupee" size={12} color={theme.colors.success} />
+                      <Text style={[styles.memberAmount, { color: theme.colors.success }]}>
+                        {amount.toFixed(2)}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -193,9 +225,9 @@ export function ExpenseSplitSelector({
                       style={[
                         styles.input,
                         {
-                          backgroundColor: theme.colors.background,
-                          color: theme.colors.text,
-                          borderColor: theme.colors.border,
+                          backgroundColor: theme.colors.inputBackground,
+                          color: theme.colors.inputText,
+                          borderColor: theme.colors.inputBorder,
                         },
                       ]}
                       value={detail?.value.toString() || '0'}
@@ -205,64 +237,97 @@ export function ExpenseSplitSelector({
                       }}
                       keyboardType="decimal-pad"
                       placeholder="0"
-                      placeholderTextColor={theme.colors.textSecondary}
+                      placeholderTextColor={theme.colors.inputPlaceholder}
                     />
-                    <Text style={[styles.unit, { color: theme.colors.textSecondary }]}>
-                      {splitType === 'percent' ? '%' : splitType === 'shares' ? '×' : '₹'}
-                    </Text>
+                    <View style={[styles.unitBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+                      <Text style={[styles.unit, { color: theme.colors.primary }]}>
+                        {splitType === 'percent' ? '%' : splitType === 'shares' ? '×' : '₹'}
+                      </Text>
+                    </View>
                   </View>
                 )}
-              </View>
+              </MotiView>
             );
           })}
         </ScrollView>
       </View>
 
       {/* Summary */}
-      <View
-        style={[
-          styles.summary,
-          {
-            backgroundColor: isValidSplit()
-              ? theme.colors.success + '10'
-              : theme.colors.error + '10',
-          },
-        ]}
+      <MotiView
+        from={{ opacity: 0, translateY: 20 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: 'timing', duration: 400 }}
       >
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryLabel, { color: theme.colors.text }]}>
-            Total Amount:
-          </Text>
-          <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-            ₹{totalAmount.toFixed(2)}
-          </Text>
-        </View>
-        
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryLabel, { color: theme.colors.text }]}>
-            Split Total:
-          </Text>
-          <Text
-            style={[
-              styles.summaryValue,
-              {
-                color: isValidSplit() ? theme.colors.success : theme.colors.error,
-              },
-            ]}
-          >
-            ₹{getTotalCalculated().toFixed(2)}
-          </Text>
-        </View>
-
-        {!isValidSplit() && (
-          <View style={styles.warningRow}>
-            <MaterialIcons name="warning" size={16} color={theme.colors.error} />
-            <Text style={[styles.warningText, { color: theme.colors.error }]}>
-              Split total doesn't match amount
+        <LinearGradient
+          colors={
+            isValidSplit()
+              ? [theme.colors.successLight, theme.colors.successLight]
+              : [theme.colors.errorLight, theme.colors.errorLight]
+          }
+          style={styles.summary}
+        >
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryLabelContainer}>
+              <MaterialIcons name="receipt-long" size={16} color={theme.colors.textPrimary} />
+              <Text style={[styles.summaryLabel, { color: theme.colors.textPrimary }]}>
+                Total Amount:
+              </Text>
+            </View>
+            <Text style={[styles.summaryValue, { color: theme.colors.textPrimary }]}>
+              ₹{totalAmount.toFixed(2)}
             </Text>
           </View>
-        )}
-      </View>
+          
+          <View style={styles.divider} />
+          
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryLabelContainer}>
+              <MaterialIcons name="calculate" size={16} color={theme.colors.textPrimary} />
+              <Text style={[styles.summaryLabel, { color: theme.colors.textPrimary }]}>
+                Split Total:
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.summaryValue,
+                {
+                  color: isValidSplit() ? theme.colors.success : theme.colors.error,
+                },
+              ]}
+            >
+              ₹{getTotalCalculated().toFixed(2)}
+            </Text>
+          </View>
+
+          {!isValidSplit() && (
+            <MotiView
+              from={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring' }}
+              style={[styles.warningRow, { backgroundColor: theme.colors.error + '20' }]}
+            >
+              <MaterialIcons name="warning" size={18} color={theme.colors.error} />
+              <Text style={[styles.warningText, { color: theme.colors.error }]}>
+                Split total doesn't match amount
+              </Text>
+            </MotiView>
+          )}
+          
+          {isValidSplit() && (
+            <MotiView
+              from={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring' }}
+              style={[styles.successRow, { backgroundColor: theme.colors.success + '20' }]}
+            >
+              <MaterialIcons name="check-circle" size={18} color={theme.colors.success} />
+              <Text style={[styles.successText, { color: theme.colors.success }]}>
+                Split is valid!
+              </Text>
+            </MotiView>
+          )}
+        </LinearGradient>
+      </MotiView>
     </View>
   );
 }
@@ -274,27 +339,32 @@ const styles = StyleSheet.create({
   section: {
     gap: 12,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   typeRow: {
     flexDirection: 'row',
     gap: 8,
   },
   typeButton: {
-    flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 2,
     gap: 6,
+    minHeight: 70,
   },
   typeText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
   },
   membersList: {
     maxHeight: 300,
@@ -304,9 +374,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 8,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   memberInfo: {
     flexDirection: 'row',
@@ -319,56 +394,93 @@ const styles = StyleSheet.create({
   },
   memberName: {
     fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   memberAmount: {
     fontSize: 13,
+    fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   input: {
     width: 80,
-    height: 40,
-    borderRadius: 8,
+    height: 44,
+    borderRadius: 10,
     paddingHorizontal: 12,
     fontSize: 15,
+    fontWeight: '600',
     borderWidth: 1,
     textAlign: 'right',
   },
+  unitBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   unit: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
   },
   summary: {
     padding: 16,
-    borderRadius: 12,
-    gap: 8,
+    borderRadius: 16,
+    gap: 12,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  summaryLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   summaryLabel: {
     fontSize: 15,
     fontWeight: '600',
   },
   summaryValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.1)',
   },
   warningRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
     marginTop: 4,
   },
   warningText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  successRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  successText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

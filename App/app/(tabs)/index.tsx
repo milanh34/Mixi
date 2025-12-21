@@ -13,12 +13,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useGroupStore } from '../../stores/groupStore';
+import { useToast } from '../../utils/toastManager';
 import { GroupCard } from '../../components/ui/GroupCard';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { GroupCardSkeleton } from '../../components/ui/SkeletonLoader';
+import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 
 export default function HomeScreen() {
@@ -26,6 +29,7 @@ export default function HomeScreen() {
   const { user } = useAuthStore();
   const { theme } = useThemeStore();
   const { groups, loading, fetchUserGroups } = useGroupStore();
+  const { showToast } = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const [showFabMenu, setShowFabMenu] = useState(false);
 
@@ -49,9 +53,16 @@ export default function HomeScreen() {
     
     setRefreshing(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await fetchUserGroups(user.uid);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setRefreshing(false);
+    
+    try {
+      await fetchUserGroups(user.uid);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Groups refreshed', 'success');
+    } catch (error) {
+      showToast('Failed to refresh groups', 'error');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleCreateGroup = async () => {
@@ -71,32 +82,49 @@ export default function HomeScreen() {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={['top']}
     >
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={[styles.greeting, { color: theme.colors.textSecondary }]}>
-            Welcome back,
-          </Text>
-          <Text style={[styles.name, { color: theme.colors.text }]}>
-            {user?.name || 'User'}
-          </Text>
+      {/* Header with Gradient */}
+      <LinearGradient
+        colors={[theme.colors.gradientStart + '15', theme.colors.background]}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <MotiView
+            from={{ opacity: 0, translateX: -20 }}
+            animate={{ opacity: 1, translateX: 0 }}
+            transition={{ type: 'timing', duration: 600 }}
+          >
+            <Text style={[styles.greeting, { color: theme.colors.textSecondary }]}>
+              Welcome back,
+            </Text>
+            <Text style={[styles.name, { color: theme.colors.textPrimary }]}>
+              {user?.name || 'User'}
+            </Text>
+          </MotiView>
+          
+          <MotiView
+            from={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', delay: 300 }}
+          >
+            <TouchableOpacity
+              onPress={async () => {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/profile');
+              }}
+              style={[styles.profileButton, { borderColor: theme.colors.primary + '30' }]}
+            >
+              {user?.profilePicture ? (
+                <Image
+                  source={{ uri: user.profilePicture }}
+                  style={styles.profilePic}
+                />
+              ) : (
+                <MaterialIcons name="account-circle" size={40} color={theme.colors.primary} />
+              )}
+            </TouchableOpacity>
+          </MotiView>
         </View>
-        <TouchableOpacity
-          onPress={async () => {
-            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push('/profile');
-          }}
-        >
-          {user?.profilePicture ? (
-            <Image
-              source={{ uri: user.profilePicture }}
-              style={styles.profilePic}
-            />
-          ) : (
-            <MaterialIcons name="account-circle" size={40} color={theme.colors.primary} />
-          )}
-        </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       {/* Groups List */}
       <ScrollView
@@ -111,14 +139,22 @@ export default function HomeScreen() {
           />
         }
       >
-        <View style={styles.titleRow}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            Your Groups
-          </Text>
-          <Text style={[styles.groupCount, { color: theme.colors.textSecondary }]}>
-            {groups.length} {groups.length === 1 ? 'group' : 'groups'}
-          </Text>
-        </View>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 200 }}
+        >
+          <View style={styles.titleRow}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+              Your Groups
+            </Text>
+            <View style={[styles.badge, { backgroundColor: theme.colors.primary + '20' }]}>
+              <Text style={[styles.groupCount, { color: theme.colors.primary }]}>
+                {groups.length}
+              </Text>
+            </View>
+          </View>
+        </MotiView>
 
         {loading && groups.length === 0 ? (
           <>
@@ -130,70 +166,111 @@ export default function HomeScreen() {
           <EmptyState
             icon="group-work"
             title="No Groups Yet"
-            description="Create or join a group to get started"
+            description="Create or join a group to start tracking expenses together"
           />
         ) : (
-          groups.map((group) => (
-            <GroupCard
+          groups.map((group, index) => (
+            <MotiView
               key={group.id}
-              group={group}
-              onPress={async () => {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push({
-                  pathname: '/group/[id]',
-                  params: { id: group.id },
-                });
-              }}
-            />
+              from={{ opacity: 0, translateY: 30 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'spring', delay: index * 100 }}
+            >
+              <GroupCard
+                group={group}
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({
+                    pathname: '/group/[id]',
+                    params: { id: group.id },
+                  });
+                }}
+              />
+            </MotiView>
           ))
         )}
       </ScrollView>
 
-      {/* FAB Menu */}
+      {/* FAB Menu Overlay */}
       {showFabMenu && (
         <TouchableOpacity
-          style={styles.fabOverlay}
+          style={[styles.fabOverlay, { backgroundColor: theme.colors.overlay }]}
           activeOpacity={1}
           onPress={() => setShowFabMenu(false)}
         >
-          <View style={styles.fabMenuContainer}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'spring' }}
+            style={styles.fabMenuContainer}
+          >
             <TouchableOpacity
-              style={[styles.fabMenuItem, { backgroundColor: theme.colors.card }]}
+              style={[
+                styles.fabMenuItem, 
+                { 
+                  backgroundColor: theme.colors.cardBackground,
+                  borderColor: theme.colors.cardBorder,
+                }
+              ]}
               onPress={handleCreateGroup}
             >
-              <MaterialIcons name="add" size={24} color={theme.colors.primary} />
-              <Text style={[styles.fabMenuText, { color: theme.colors.text }]}>
+              <View style={[styles.fabMenuIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                <MaterialIcons name="add" size={24} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.fabMenuText, { color: theme.colors.textPrimary }]}>
                 Create Group
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.fabMenuItem, { backgroundColor: theme.colors.card }]}
+              style={[
+                styles.fabMenuItem, 
+                { 
+                  backgroundColor: theme.colors.cardBackground,
+                  borderColor: theme.colors.cardBorder,
+                }
+              ]}
               onPress={handleJoinGroup}
             >
-              <MaterialIcons name="group-add" size={24} color={theme.colors.success} />
-              <Text style={[styles.fabMenuText, { color: theme.colors.text }]}>
+              <View style={[styles.fabMenuIcon, { backgroundColor: theme.colors.success + '20' }]}>
+                <MaterialIcons name="group-add" size={24} color={theme.colors.success} />
+              </View>
+              <Text style={[styles.fabMenuText, { color: theme.colors.textPrimary }]}>
                 Join Group
               </Text>
             </TouchableOpacity>
-          </View>
+          </MotiView>
         </TouchableOpacity>
       )}
 
       {/* Main FAB */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        onPress={async () => {
-          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          setShowFabMenu(!showFabMenu);
-        }}
+      <MotiView
+        from={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: 'spring', delay: 600 }}
       >
-        <MaterialIcons
-          name={showFabMenu ? 'close' : 'add'}
-          size={28}
-          color="#FFFFFF"
-        />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.fab, { 
+            backgroundColor: theme.colors.fabBackground,
+            shadowColor: theme.colors.fabShadow,
+          }]}
+          onPress={async () => {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setShowFabMenu(!showFabMenu);
+          }}
+        >
+          <LinearGradient
+            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+            style={styles.fabGradient}
+          >
+            <MaterialIcons
+              name={showFabMenu ? 'close' : 'add'}
+              size={28}
+              color="#FFFFFF"
+            />
+          </LinearGradient>
+        </TouchableOpacity>
+      </MotiView>
     </SafeAreaView>
   );
 }
@@ -201,6 +278,9 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerGradient: {
+    paddingBottom: 16,
   },
   header: {
     flexDirection: 'row',
@@ -212,10 +292,16 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 14,
     marginBottom: 4,
+    fontWeight: '500',
   },
   name: {
     fontSize: 28,
     fontWeight: '700',
+  },
+  profileButton: {
+    borderRadius: 24,
+    borderWidth: 2,
+    overflow: 'hidden',
   },
   profilePic: {
     width: 40,
@@ -225,6 +311,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingBottom: 120,
+    paddingTop: 8,
   },
   titleRow: {
     flexDirection: 'row',
@@ -236,8 +323,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
   },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
   groupCount: {
     fontSize: 14,
+    fontWeight: '700',
   },
   fabOverlay: {
     position: 'absolute',
@@ -245,7 +338,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
     alignItems: 'flex-end',
     paddingBottom: 100,
@@ -259,14 +351,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 16,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 4,
+  },
+  fabMenuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fabMenuText: {
     fontSize: 16,
@@ -279,12 +379,16 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
+    overflow: 'hidden',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  fabGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

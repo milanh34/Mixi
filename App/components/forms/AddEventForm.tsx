@@ -7,18 +7,22 @@ import {
   StyleSheet,
   ScrollView,
   Modal,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useTimelineStore } from '../../stores/timelineStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useToast } from '../../utils/toastManager';
 import { useImagePicker } from '../../hooks/useImagePicker';
+import { MotiView } from 'moti';
+import * as Haptics from 'expo-haptics';
 
 interface AddEventFormProps {
   visible: boolean;
@@ -27,14 +31,15 @@ interface AddEventFormProps {
 }
 
 const EVENT_TYPES = [
-  { id: 'milestone', label: 'Milestone', icon: 'flag' },
-  { id: 'payment', label: 'Payment', icon: 'payment' },
-  { id: 'movement', label: 'Location', icon: 'place' },
+  { id: 'milestone', label: 'Milestone', icon: 'flag', color: '#4CAF50' },
+  { id: 'payment', label: 'Payment', icon: 'payment', color: '#2196F3' },
+  { id: 'movement', label: 'Location', icon: 'place', color: '#FF9800' },
 ] as const;
 
 export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
   const { theme } = useThemeStore();
   const { user } = useAuthStore();
+  const { showToast } = useToast();
   const { createEvent, loading } = useTimelineStore();
   const { pickImage, takePhoto, uploading } = useImagePicker();
 
@@ -46,13 +51,15 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a title');
+      showToast('Please enter a title', 'error');
       return;
     }
 
     if (!user) return;
 
     try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
       await createEvent({
         groupId,
         creatorId: user.uid,
@@ -66,19 +73,26 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
         photos,
       });
 
-      Alert.alert('Success', 'Event added to timeline!');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Event added to timeline!', 'success');
       handleClose();
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast(error.message || 'Failed to add event', 'error');
     }
   };
 
   const handleAddPhoto = async (source: 'gallery' | 'camera') => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const uri = source === 'gallery' ? await pickImage() : await takePhoto();
-    if (uri) setPhotos([...photos, uri]);
+    if (uri) {
+      setPhotos([...photos, uri]);
+      showToast('Photo added', 'success');
+    }
   };
 
-  const handleRemovePhoto = (index: number) => {
+  const handleRemovePhoto = async (index: number) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPhotos(photos.filter((_, i) => i !== index));
   };
 
@@ -97,232 +111,314 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={[styles.container, { backgroundColor: theme.colors.background }]}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose}>
-            <MaterialIcons name="close" size={28} color={theme.colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-            Add Timeline Event
-          </Text>
-          <View style={{ width: 28 }} />
-        </View>
+        {/* Header with Gradient */}
+        <LinearGradient
+          colors={[theme.colors.gradientStart + '15', theme.colors.background]}
+          style={styles.headerGradient}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
+              <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              Add Timeline Event
+            </Text>
+            
+            <View style={{ width: 40 }} />
+          </View>
+        </LinearGradient>
 
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Title */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>
-              Title *
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.colors.surface,
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-              placeholder="e.g., Arrived at hotel"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={title}
-              onChangeText={setTitle}
-            />
-          </View>
-
-          {/* Event Type */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>
-              Type
-            </Text>
-            <View style={styles.typeRow}>
-              {EVENT_TYPES.map((eventType) => (
-                <TouchableOpacity
-                  key={eventType.id}
-                  style={[
-                    styles.typeButton,
-                    {
-                      backgroundColor:
-                        type === eventType.id
-                          ? theme.colors.primary + '20'
-                          : theme.colors.surface,
-                      borderColor:
-                        type === eventType.id
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                    },
-                  ]}
-                  onPress={() => setType(eventType.id)}
-                >
-                  <MaterialIcons
-                    name={eventType.icon as any}
-                    size={24}
-                    color={
-                      type === eventType.id ? theme.colors.primary : theme.colors.text
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.typeText,
-                      {
-                        color:
-                          type === eventType.id
-                            ? theme.colors.primary
-                            : theme.colors.text,
-                      },
-                    ]}
-                  >
-                    {eventType.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Description */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>
-              Description (Optional)
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                styles.textArea,
-                {
-                  backgroundColor: theme.colors.surface,
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-              placeholder="Add details..."
-              placeholderTextColor={theme.colors.textSecondary}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-            />
-          </View>
-
-          {/* Location */}
-          {type === 'movement' && (
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300 }}
+          >
             <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>
-                Location
-              </Text>
-              <TextInput
+              <View style={styles.labelRow}>
+                <MaterialIcons name="title" size={18} color={theme.colors.primary} />
+                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                  Title *
+                </Text>
+              </View>
+              <View
                 style={[
-                  styles.input,
+                  styles.inputContainer,
                   {
-                    backgroundColor: theme.colors.surface,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.inputBackground,
+                    borderColor: theme.colors.inputBorder,
                   },
                 ]}
-                placeholder="e.g., Goa Beach Resort"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={location}
-                onChangeText={setLocation}
+              >
+                <TextInput
+                  style={[styles.input, { color: theme.colors.inputText }]}
+                  placeholder="e.g., Arrived at hotel"
+                  placeholderTextColor={theme.colors.inputPlaceholder}
+                  value={title}
+                  onChangeText={setTitle}
+                />
+              </View>
+            </View>
+          </MotiView>
+
+          {/* Event Type */}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300, delay: 100 }}
+          >
+            <View style={styles.section}>
+              <View style={styles.labelRow}>
+                <MaterialIcons name="category" size={18} color={theme.colors.primary} />
+                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                  Type
+                </Text>
+              </View>
+              <View style={styles.typeRow}>
+                {EVENT_TYPES.map((eventType, index) => (
+                  <TouchableOpacity
+                    key={eventType.id}
+                    style={[
+                      styles.typeButton,
+                      {
+                        backgroundColor:
+                          type === eventType.id
+                            ? eventType.color + '20'
+                            : theme.colors.cardBackground,
+                        borderColor:
+                          type === eventType.id
+                            ? eventType.color
+                            : theme.colors.cardBorder,
+                      },
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setType(eventType.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons
+                      name={eventType.icon as any}
+                      size={24}
+                      color={type === eventType.id ? eventType.color : theme.colors.textMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.typeText,
+                        {
+                          color:
+                            type === eventType.id
+                              ? eventType.color
+                              : theme.colors.textPrimary,
+                        },
+                      ]}
+                    >
+                      {eventType.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </MotiView>
+
+          {/* Description */}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300, delay: 200 }}
+          >
+            <View style={styles.section}>
+              <View style={styles.labelRow}>
+                <MaterialIcons name="description" size={18} color={theme.colors.primary} />
+                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                  Description (Optional)
+                </Text>
+              </View>
+              <TextInput
+                style={[
+                  styles.textArea,
+                  {
+                    backgroundColor: theme.colors.inputBackground,
+                    color: theme.colors.inputText,
+                    borderColor: theme.colors.inputBorder,
+                  },
+                ]}
+                placeholder="Add details..."
+                placeholderTextColor={theme.colors.inputPlaceholder}
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={4}
               />
             </View>
+          </MotiView>
+
+          {/* Location (Only for movement type) */}
+          {type === 'movement' && (
+            <MotiView
+              from={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', duration: 400 }}
+            >
+              <View style={styles.section}>
+                <View style={styles.labelRow}>
+                  <MaterialIcons name="place" size={18} color={theme.colors.warning} />
+                  <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                    Location
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.inputContainer,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                    },
+                  ]}
+                >
+                  <MaterialIcons name="location-on" size={20} color={theme.colors.textMuted} />
+                  <TextInput
+                    style={[styles.input, { color: theme.colors.inputText }]}
+                    placeholder="e.g., Goa Beach Resort"
+                    placeholderTextColor={theme.colors.inputPlaceholder}
+                    value={location}
+                    onChangeText={setLocation}
+                  />
+                </View>
+              </View>
+            </MotiView>
           )}
 
           {/* Photos */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>
-              Photos (Optional)
-            </Text>
-            
-            {photos.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.photosRow}
-              >
-                {photos.map((photo, index) => (
-                  <View key={index} style={styles.photoContainer}>
-                    <Image source={{ uri: photo }} style={styles.photo} />
-                    <TouchableOpacity
-                      style={[
-                        styles.removeButton,
-                        { backgroundColor: theme.colors.error },
-                      ]}
-                      onPress={() => handleRemovePhoto(index)}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300, delay: 300 }}
+          >
+            <View style={styles.section}>
+              <View style={styles.labelRow}>
+                <MaterialIcons name="photo-library" size={18} color={theme.colors.primary} />
+                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                  Photos (Optional)
+                </Text>
+              </View>
+              
+              {photos.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.photosRow}
+                >
+                  {photos.map((photo, index) => (
+                    <MotiView
+                      key={index}
+                      from={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ type: 'spring' }}
+                      style={styles.photoContainer}
                     >
-                      <MaterialIcons name="close" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
+                      <Image source={{ uri: photo }} style={styles.photo} />
+                      <TouchableOpacity
+                        style={[
+                          styles.removeButton,
+                          { backgroundColor: theme.colors.error },
+                        ]}
+                        onPress={() => handleRemovePhoto(index)}
+                        activeOpacity={0.8}
+                      >
+                        <MaterialIcons name="close" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </MotiView>
+                  ))}
+                </ScrollView>
+              )}
 
-            <View style={styles.photoButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.photoButton,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                onPress={() => handleAddPhoto('gallery')}
-                disabled={uploading}
-              >
-                <MaterialIcons
-                  name="photo-library"
-                  size={24}
-                  color={theme.colors.text}
-                />
-                <Text style={[styles.photoButtonText, { color: theme.colors.text }]}>
-                  Gallery
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.photoButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.photoButton,
+                    {
+                      backgroundColor: theme.colors.cardBackground,
+                      borderColor: theme.colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => handleAddPhoto('gallery')}
+                  disabled={uploading}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={[theme.colors.primary + '20', theme.colors.secondary + '20']}
+                    style={styles.photoIconContainer}
+                  >
+                    <MaterialIcons name="photo-library" size={24} color={theme.colors.primary} />
+                  </LinearGradient>
+                  <Text style={[styles.photoButtonText, { color: theme.colors.textPrimary }]}>
+                    Gallery
+                  </Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.photoButton,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                onPress={() => handleAddPhoto('camera')}
-                disabled={uploading}
-              >
-                <MaterialIcons
-                  name="camera-alt"
-                  size={24}
-                  color={theme.colors.text}
-                />
-                <Text style={[styles.photoButtonText, { color: theme.colors.text }]}>
-                  Camera
-                </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.photoButton,
+                    {
+                      backgroundColor: theme.colors.cardBackground,
+                      borderColor: theme.colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => handleAddPhoto('camera')}
+                  disabled={uploading}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={[theme.colors.secondary + '20', theme.colors.accent + '20']}
+                    style={styles.photoIconContainer}
+                  >
+                    <MaterialIcons name="camera-alt" size={24} color={theme.colors.secondary} />
+                  </LinearGradient>
+                  <Text style={[styles.photoButtonText, { color: theme.colors.textPrimary }]}>
+                    Camera
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              {uploading && (
+                <View style={styles.uploadingContainer}>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                  <Text style={[styles.uploadingText, { color: theme.colors.textSecondary }]}>
+                    Uploading photo...
+                  </Text>
+                </View>
+              )}
             </View>
-            
-            {uploading && (
-              <Text style={[styles.uploadingText, { color: theme.colors.textSecondary }]}>
-                Uploading...
-              </Text>
-            )}
-          </View>
+          </MotiView>
         </ScrollView>
 
-        {/* Submit Button */}
-        <View style={styles.footer}>
+        {/* Submit Button with Gradient */}
+        <View style={[styles.footer, { backgroundColor: theme.colors.background }]}>
           <TouchableOpacity
-            style={[
-              styles.submitButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
             onPress={handleSubmit}
-            disabled={loading}
+            disabled={loading || uploading}
+            activeOpacity={0.8}
           >
-            <Text style={styles.submitText}>
-              {loading ? 'Adding...' : 'Add Event'}
-            </Text>
+            <LinearGradient
+              colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+              style={[styles.submitButton, (loading || uploading) && { opacity: 0.7 }]}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.submitText}>Add Event</Text>
+                  <MaterialIcons name="add" size={20} color="#FFFFFF" />
+                </>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -334,13 +430,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  headerGradient: {
+    paddingTop: 60,
+    paddingBottom: 12,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 16,
-    paddingTop: 60,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
@@ -348,26 +453,43 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 24,
-    paddingBottom: 100,
+    paddingTop: 8,
+    paddingBottom: 120,
   },
   section: {
     marginBottom: 24,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 12,
   },
-  input: {
+  label: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     height: 56,
     borderRadius: 16,
     paddingHorizontal: 16,
-    fontSize: 16,
+    gap: 12,
     borderWidth: 1,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
   },
   textArea: {
     height: 120,
+    borderRadius: 16,
+    paddingHorizontal: 16,
     paddingTop: 16,
+    fontSize: 16,
+    borderWidth: 1,
     textAlignVertical: 'top',
   },
   typeRow: {
@@ -380,11 +502,11 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 2,
+    gap: 8,
   },
   typeText: {
     fontSize: 13,
-    fontWeight: '600',
-    marginTop: 4,
+    fontWeight: '700',
   },
   photosRow: {
     gap: 12,
@@ -397,16 +519,22 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 12,
+    backgroundColor: '#E0E0E0',
   },
   removeButton: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   photoButtons: {
     flexDirection: 'row',
@@ -414,22 +542,33 @@ const styles = StyleSheet.create({
   },
   photoButton: {
     flex: 1,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 2,
+    gap: 12,
+  },
+  photoIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  uploadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
     gap: 8,
-  },
-  photoButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: 12,
   },
   uploadingText: {
-    textAlign: 'center',
-    marginTop: 8,
     fontSize: 14,
+    fontWeight: '500',
   },
   footer: {
     position: 'absolute',
@@ -438,12 +577,24 @@ const styles = StyleSheet.create({
     right: 0,
     padding: 24,
     paddingBottom: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   submitButton: {
+    flexDirection: 'row',
     height: 56,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
   submitText: {
     color: '#FFFFFF',

@@ -17,10 +17,8 @@ export default function TabLayout() {
     const inAuthGroup = segments[0] === 'auth';
 
     if (!isAuthenticated && !inAuthGroup) {
-      // Redirect to login if not authenticated
       router.replace('/auth/login');
     } else if (isAuthenticated && inAuthGroup) {
-      // Redirect to home if authenticated but still on auth screens
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isInitialized, segments]);
@@ -36,13 +34,24 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.textSecondary,
+        tabBarActiveTintColor: theme.colors.tabBarActive,
+        tabBarInactiveTintColor: theme.colors.tabBarInactive,
         tabBarStyle: {
-          backgroundColor: theme.colors.card,
+          backgroundColor: theme.colors.cardBackground,
           borderTopColor: theme.colors.border,
+          borderTopWidth: 1,
           height: 60,
           paddingBottom: 8,
+          paddingTop: 8,
+          shadowColor: theme.colors.cardShadow,
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          elevation: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
         },
         headerShown: false,
       }}

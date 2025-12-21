@@ -27,7 +27,7 @@ export function SkeletonLoader({ width = '100%', height = 20, borderRadius = 8, 
           width,
           height,
           borderRadius,
-          backgroundColor: theme.colors.surface,
+          backgroundColor: theme.colors.cardBackground,
         },
         style,
       ]}
@@ -43,8 +43,8 @@ export function GroupCardSkeleton() {
       style={[
         styles.groupCardSkeleton,
         {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.cardBackground,
+          borderColor: theme.colors.cardBorder,
         },
       ]}
     >
@@ -72,8 +72,8 @@ export function ExpenseItemSkeleton() {
       style={[
         styles.expenseItemSkeleton,
         {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.cardBackground,
+          borderColor: theme.colors.cardBorder,
         },
       ]}
     >
@@ -95,6 +95,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 16,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   skeletonHeader: {
     flexDirection: 'row',
@@ -117,6 +122,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   skeletonLeft: {
     flexDirection: 'row',

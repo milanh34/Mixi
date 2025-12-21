@@ -1,7 +1,9 @@
 // components/ui/ThemeCard.tsx
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { THEMES } from '../../stores/themeStore';
+import { MotiView } from 'moti';
 
 interface ThemeCardProps {
   themeName: keyof typeof THEMES;
@@ -17,28 +19,39 @@ export function ThemeCard({ themeName, isSelected, onSelect }: ThemeCardProps) {
       style={[
         styles.container,
         { backgroundColor: theme.colors.background },
-        isSelected && styles.selected,
+        isSelected && { borderColor: theme.colors.primary, borderWidth: 3 },
       ]}
       onPress={onSelect}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
     >
       <View style={styles.preview}>
-        <View
-          style={[styles.previewCard, { backgroundColor: theme.colors.card }]}
+        {/* Gradient Preview */}
+        <LinearGradient
+          colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.previewGradient}
         />
+        
+        {/* Card Preview */}
         <View
-          style={[styles.previewSurface, { backgroundColor: theme.colors.surface }]}
+          style={[styles.previewCard, { backgroundColor: theme.colors.cardBackground }]}
         />
       </View>
       
-      <Text style={[styles.name, { color: theme.colors.text }]}>
+      <Text style={[styles.name, { color: theme.colors.textPrimary }]}>
         {theme.name}
       </Text>
       
       {isSelected && (
-        <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
+        <MotiView
+          from={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring' }}
+          style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}
+        >
           <MaterialIcons name="check" size={16} color="#FFFFFF" />
-        </View>
+        </MotiView>
       )}
     </TouchableOpacity>
   );
@@ -53,24 +66,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 2,
     borderColor: 'transparent',
-  },
-  selected: {
-    borderColor: '#4285F4',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   preview: {
     flex: 1,
     gap: 8,
   },
-  previewCard: {
+  previewGradient: {
     flex: 1,
     borderRadius: 12,
   },
-  previewSurface: {
+  previewCard: {
     height: 40,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   name: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     marginTop: 12,
     textAlign: 'center',
@@ -84,5 +99,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });

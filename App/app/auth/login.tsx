@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { useToast } from '../../utils/toastManager';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 
@@ -24,6 +24,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const { signIn, loading } = useAuthStore();
   const { theme } = useThemeStore();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +32,13 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showToast('Please fill in all fields', 'error');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      showToast('Please enter a valid email address', 'error');
       return;
     }
 
@@ -39,12 +46,23 @@ export default function LoginScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await signIn(email.trim(), password);
       
-      // Navigate to home after successful login
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Welcome back!', 'success');
       router.replace('/(tabs)');
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Login Failed', error.message);
+      
+      if (error.code === 'auth/user-not-found') {
+        showToast('No account found with this email', 'error');
+      } else if (error.code === 'auth/wrong-password') {
+        showToast('Incorrect password', 'error');
+      } else if (error.code === 'auth/invalid-email') {
+        showToast('Invalid email address', 'error');
+      } else if (error.code === 'auth/too-many-requests') {
+        showToast('Too many attempts. Please try again later', 'error');
+      } else {
+        showToast(error.message || 'Login failed', 'error');
+      }
     }
   };
 
@@ -57,7 +75,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.content}
       >
-        {/* Logo Section */}
+        {/* Logo Section with Animated Gradient */}
         <MotiView
           from={{ opacity: 0, translateY: -50 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -65,30 +83,50 @@ export default function LoginScreen() {
           style={styles.logoSection}
         >
           <LinearGradient
-            colors={[theme.colors.primary, theme.colors.secondary]}
+            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
             style={styles.logoCircle}
           >
             <MaterialIcons name="receipt-long" size={48} color="#FFFFFF" />
           </LinearGradient>
-          <Text style={[styles.appName, { color: theme.colors.text }]}>Mixi</Text>
-          <Text style={[styles.tagline, { color: theme.colors.textSecondary }]}>
-            Split expenses, share memories
-          </Text>
+          
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 300, duration: 600 }}
+          >
+            <Text style={[styles.appName, { color: theme.colors.textPrimary }]}>
+              Mixi
+            </Text>
+            <Text style={[styles.tagline, { color: theme.colors.textSecondary }]}>
+              Split expenses, share memories
+            </Text>
+          </MotiView>
         </MotiView>
 
         {/* Form Section */}
         <MotiView
           from={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', delay: 300, duration: 600 }}
+          transition={{ type: 'spring', delay: 400, duration: 600 }}
           style={styles.formSection}
         >
-          <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-            <MaterialIcons name="email" size={20} color={theme.colors.textSecondary} />
+          {/* Email Input */}
+          <View
+            style={[
+              styles.inputContainer,
+              {
+                backgroundColor: theme.colors.inputBackground,
+                borderColor: theme.colors.inputBorder,
+              },
+            ]}
+          >
+            <View style={[styles.iconWrapper, { backgroundColor: theme.colors.primary + '15' }]}>
+              <MaterialIcons name="email" size={20} color={theme.colors.primary} />
+            </View>
             <TextInput
-              style={[styles.input, { color: theme.colors.text }]}
-              placeholder="Email"
-              placeholderTextColor={theme.colors.textSecondary}
+              style={[styles.input, { color: theme.colors.inputText }]}
+              placeholder="Email address"
+              placeholderTextColor={theme.colors.inputPlaceholder}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -97,65 +135,70 @@ export default function LoginScreen() {
             />
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-            <MaterialIcons name="lock" size={20} color={theme.colors.textSecondary} />
+          {/* Password Input */}
+          <View
+            style={[
+              styles.inputContainer,
+              {
+                backgroundColor: theme.colors.inputBackground,
+                borderColor: theme.colors.inputBorder,
+              },
+            ]}
+          >
+            <View style={[styles.iconWrapper, { backgroundColor: theme.colors.secondary + '15' }]}>
+              <MaterialIcons name="lock" size={20} color={theme.colors.secondary} />
+            </View>
             <TextInput
-              style={[styles.input, { color: theme.colors.text }]}
+              style={[styles.input, { color: theme.colors.inputText }]}
               placeholder="Password"
-              placeholderTextColor={theme.colors.textSecondary}
+              placeholderTextColor={theme.colors.inputPlaceholder}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               autoComplete="password"
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
+            >
               <MaterialIcons
                 name={showPassword ? 'visibility-off' : 'visibility'}
                 size={20}
-                color={theme.colors.textSecondary}
+                color={theme.colors.textMuted}
               />
             </TouchableOpacity>
           </View>
 
+          {/* Forgot Password */}
           <TouchableOpacity
-            onPress={() => Alert.alert('Forgot Password', 'Feature coming soon!')}
+            onPress={() => router.push('/auth/forgot-password')}
+            style={styles.forgotPasswordContainer}
           >
             <Text style={[styles.forgotPassword, { color: theme.colors.primary }]}>
               Forgot Password?
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleLogin} disabled={loading}>
+          {/* Login Button with Gradient */}
+          <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
             <LinearGradient
-              colors={[theme.colors.primary, theme.colors.secondary]}
+              colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.loginButton}
+              end={{ x: 1, y: 1 }}
+              style={[
+                styles.loginButton,
+                loading && { opacity: 0.7 },
+              ]}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
+                <>
+                  <Text style={styles.loginButtonText}>Sign In</Text>
+                  <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                </>
               )}
             </LinearGradient>
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
-            <Text style={[styles.dividerText, { color: theme.colors.textSecondary }]}>
-              OR
-            </Text>
-            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.socialButton, { backgroundColor: theme.colors.card }]}
-            onPress={() => Alert.alert('Google Sign In', 'Coming soon!')}
-          >
-            <MaterialIcons name="login" size={20} color={theme.colors.text} />
-            <Text style={[styles.socialButtonText, { color: theme.colors.text }]}>
-              Continue with Google
-            </Text>
           </TouchableOpacity>
         </MotiView>
 
@@ -163,7 +206,7 @@ export default function LoginScreen() {
         <MotiView
           from={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 600, duration: 600 }}
+          transition={{ delay: 800, duration: 600 }}
           style={styles.footer}
         >
           <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>
@@ -202,17 +245,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
   },
   appName: {
     fontSize: 36,
     fontWeight: '700',
     marginBottom: 8,
+    textAlign: 'center',
   },
   tagline: {
     fontSize: 15,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   formSection: {
     gap: 16,
@@ -221,66 +267,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    height: 56,
+    height: 60,
     borderRadius: 16,
     gap: 12,
+    borderWidth: 1,
+  },
+  iconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   input: {
     flex: 1,
     fontSize: 16,
+    fontWeight: '500',
+  },
+  eyeButton: {
+    padding: 4,
+  },
+  forgotPasswordContainer: {
+    alignSelf: 'flex-end',
+    marginTop: -4,
   },
   forgotPassword: {
-    textAlign: 'right',
     fontSize: 14,
     fontWeight: '600',
   },
   loginButton: {
-    height: 56,
+    flexDirection: 'row',
+    height: 60,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
     marginTop: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   loginButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-    gap: 12,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    fontSize: 14,
-  },
-  socialButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 56,
-    borderRadius: 16,
-    gap: 12,
-  },
-  socialButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 'auto',
+    marginBottom: 32,
   },
   footerText: {
     fontSize: 15,

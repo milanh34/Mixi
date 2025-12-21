@@ -1,8 +1,10 @@
 // components/ui/TimelineEvent.tsx
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { GroupTimelineEvent } from '../../lib/schema';
 import { useThemeStore } from '../../stores/themeStore';
+import { MotiView } from 'moti';
 
 interface TimelineEventProps {
   event: GroupTimelineEvent;
@@ -18,7 +20,7 @@ export function TimelineEvent({ event }: TimelineEventProps) {
     year: 'numeric',
   });
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string): keyof typeof MaterialIcons.glyphMap => {
     const icons: Record<string, keyof typeof MaterialIcons.glyphMap> = {
       milestone: 'flag',
       payment: 'payment',
@@ -29,43 +31,57 @@ export function TimelineEvent({ event }: TimelineEventProps) {
 
   const getTypeColor = (type: string) => {
     const colors: Record<string, string> = {
-      milestone: '#4CAF50',
-      payment: '#2196F3',
-      movement: '#FF9800',
+      milestone: theme.colors.success,
+      payment: theme.colors.primary,
+      movement: theme.colors.warning,
     };
-    return colors[type] || theme.colors.primary;
+    return colors[type] || theme.colors.accent;
   };
 
   const typeColor = getTypeColor(event.type);
 
   return (
     <View style={styles.container}>
+      {/* Timeline Line */}
       <View style={styles.timeline}>
-        <View style={[styles.dot, { backgroundColor: typeColor }]} />
+        <LinearGradient
+          colors={[typeColor, typeColor + '80']}
+          style={styles.dot}
+        />
         <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
       </View>
 
-      <View
+      {/* Event Content */}
+      <MotiView
+        from={{ opacity: 0, translateX: 20 }}
+        animate={{ opacity: 1, translateX: 0 }}
+        transition={{ type: 'timing', duration: 400 }}
         style={[
           styles.content,
           {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
+            backgroundColor: theme.colors.cardBackground,
+            borderColor: theme.colors.cardBorder,
           },
         ]}
       >
         <View style={styles.header}>
-          <View style={[styles.iconContainer, { backgroundColor: typeColor + '20' }]}>
+          <LinearGradient
+            colors={[typeColor + '30', typeColor + '15']}
+            style={styles.iconContainer}
+          >
             <MaterialIcons name={getTypeIcon(event.type)} size={20} color={typeColor} />
-          </View>
+          </LinearGradient>
           
           <View style={styles.headerText}>
-            <Text style={[styles.title, { color: theme.colors.text }]}>
+            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
               {event.title}
             </Text>
-            <Text style={[styles.date, { color: theme.colors.textSecondary }]}>
-              {dateStr}
-            </Text>
+            <View style={styles.dateRow}>
+              <MaterialIcons name="calendar-today" size={12} color={theme.colors.textMuted} />
+              <Text style={[styles.date, { color: theme.colors.textSecondary }]}>
+                {dateStr}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -76,13 +92,9 @@ export function TimelineEvent({ event }: TimelineEventProps) {
         )}
 
         {event.location && (
-          <View style={styles.location}>
-            <MaterialIcons
-              name="place"
-              size={16}
-              color={theme.colors.textSecondary}
-            />
-            <Text style={[styles.locationText, { color: theme.colors.textSecondary }]}>
+          <View style={[styles.location, { backgroundColor: theme.colors.primary + '10' }]}>
+            <MaterialIcons name="place" size={16} color={theme.colors.primary} />
+            <Text style={[styles.locationText, { color: theme.colors.primary }]}>
               {event.location.name}
             </Text>
           </View>
@@ -91,18 +103,20 @@ export function TimelineEvent({ event }: TimelineEventProps) {
         {event.photos.length > 0 && (
           <View style={styles.photos}>
             {event.photos.slice(0, 3).map((photo, index) => (
-              <Image key={index} source={{ uri: photo }} style={styles.photo} />
+              <TouchableOpacity key={index} activeOpacity={0.8}>
+                <Image source={{ uri: photo }} style={styles.photo} />
+              </TouchableOpacity>
             ))}
             {event.photos.length > 3 && (
-              <View style={styles.morePhotos}>
-                <Text style={[styles.moreText, { color: theme.colors.text }]}>
+              <View style={[styles.morePhotos, { backgroundColor: theme.colors.overlay }]}>
+                <Text style={styles.moreText}>
                   +{event.photos.length - 3}
                 </Text>
               </View>
             )}
           </View>
         )}
-      </View>
+      </MotiView>
     </View>
   );
 }
@@ -115,11 +129,17 @@ const styles = StyleSheet.create({
   timeline: {
     alignItems: 'center',
     marginRight: 16,
+    paddingTop: 4,
   },
   dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   line: {
     width: 2,
@@ -131,6 +151,11 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   header: {
     flexDirection: 'row',
@@ -138,9 +163,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -150,45 +175,59 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   date: {
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '500',
   },
   description: {
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 12,
+    fontWeight: '500',
   },
   location: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     marginBottom: 12,
+    alignSelf: 'flex-start',
   },
   locationText: {
-    fontSize: 14,
-    marginLeft: 4,
+    fontSize: 13,
+    fontWeight: '600',
   },
   photos: {
     flexDirection: 'row',
     gap: 8,
+    flexWrap: 'wrap',
   },
   photo: {
     width: 80,
     height: 80,
     borderRadius: 12,
+    backgroundColor: '#E0E0E0',
   },
   morePhotos: {
     width: 80,
     height: 80,
     borderRadius: 12,
-    backgroundColor: '#00000020',
     justifyContent: 'center',
     alignItems: 'center',
   },
   moreText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
@@ -18,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { useToast } from '../../utils/toastManager';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 
@@ -25,6 +25,7 @@ export default function SignUpScreen() {
   const router = useRouter();
   const { signUp, loading } = useAuthStore();
   const { theme } = useThemeStore();
+  const { showToast } = useToast();
 
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -34,12 +35,28 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     if (!name.trim() || !username.trim() || !email.trim() || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showToast('Please fill in all fields', 'error');
+      return;
+    }
+
+    if (name.trim().length < 2) {
+      showToast('Name must be at least 2 characters', 'error');
+      return;
+    }
+
+    if (username.trim().length < 3) {
+      showToast('Username must be at least 3 characters', 'error');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      showToast('Please enter a valid email address', 'error');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showToast('Password must be at least 6 characters', 'error');
       return;
     }
 
@@ -47,12 +64,21 @@ export default function SignUpScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await signUp(email.trim(), password, username.trim(), name.trim());
 
-      // Navigate to home after successful signup
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Account created successfully!', 'success');
       router.replace('/(tabs)');
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Sign Up Failed', error.message);
+      
+      if (error.code === 'auth/email-already-in-use') {
+        showToast('Email already in use', 'error');
+      } else if (error.code === 'auth/invalid-email') {
+        showToast('Invalid email address', 'error');
+      } else if (error.code === 'auth/weak-password') {
+        showToast('Password is too weak', 'error');
+      } else {
+        showToast(error.message || 'Sign up failed', 'error');
+      }
     }
   };
 
@@ -68,8 +94,9 @@ export default function SignUpScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
+          {/* Header with Animated Gradient Logo */}
           <MotiView
             from={{ opacity: 0, translateY: -30 }}
             animate={{ opacity: 1, translateY: 0 }}
@@ -77,12 +104,13 @@ export default function SignUpScreen() {
             style={styles.header}
           >
             <LinearGradient
-              colors={[theme.colors.primary, theme.colors.secondary]}
+              colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
               style={styles.logoCircle}
             >
               <MaterialIcons name="person-add" size={40} color="#FFFFFF" />
             </LinearGradient>
-            <Text style={[styles.title, { color: theme.colors.text }]}>
+            
+            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
               Create Account
             </Text>
             <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
@@ -94,27 +122,49 @@ export default function SignUpScreen() {
           <MotiView
             from={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', delay: 200, duration: 600 }}
+            transition={{ type: 'spring', delay: 300, duration: 600 }}
             style={styles.form}
           >
-            <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-              <MaterialIcons name="person" size={20} color={theme.colors.textSecondary} />
+            {/* Name Input */}
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+            >
+              <View style={[styles.iconWrapper, { backgroundColor: theme.colors.primary + '15' }]}>
+                <MaterialIcons name="person" size={20} color={theme.colors.primary} />
+              </View>
               <TextInput
-                style={[styles.input, { color: theme.colors.text }]}
+                style={[styles.input, { color: theme.colors.inputText }]}
                 placeholder="Full Name"
-                placeholderTextColor={theme.colors.textSecondary}
+                placeholderTextColor={theme.colors.inputPlaceholder}
                 value={name}
                 onChangeText={setName}
                 autoComplete="name"
               />
             </View>
 
-            <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-              <MaterialIcons name="alternate-email" size={20} color={theme.colors.textSecondary} />
+            {/* Username Input */}
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+            >
+              <View style={[styles.iconWrapper, { backgroundColor: theme.colors.secondary + '15' }]}>
+                <MaterialIcons name="alternate-email" size={20} color={theme.colors.secondary} />
+              </View>
               <TextInput
-                style={[styles.input, { color: theme.colors.text }]}
+                style={[styles.input, { color: theme.colors.inputText }]}
                 placeholder="Username"
-                placeholderTextColor={theme.colors.textSecondary}
+                placeholderTextColor={theme.colors.inputPlaceholder}
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
@@ -122,12 +172,23 @@ export default function SignUpScreen() {
               />
             </View>
 
-            <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-              <MaterialIcons name="email" size={20} color={theme.colors.textSecondary} />
+            {/* Email Input */}
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+            >
+              <View style={[styles.iconWrapper, { backgroundColor: theme.colors.accent + '15' }]}>
+                <MaterialIcons name="email" size={20} color={theme.colors.accent} />
+              </View>
               <TextInput
-                style={[styles.input, { color: theme.colors.text }]}
-                placeholder="Email"
-                placeholderTextColor={theme.colors.textSecondary}
+                style={[styles.input, { color: theme.colors.inputText }]}
+                placeholder="Email address"
+                placeholderTextColor={theme.colors.inputPlaceholder}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -136,32 +197,50 @@ export default function SignUpScreen() {
               />
             </View>
 
-            <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-              <MaterialIcons name="lock" size={20} color={theme.colors.textSecondary} />
+            {/* Password Input */}
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+            >
+              <View style={[styles.iconWrapper, { backgroundColor: theme.colors.success + '15' }]}>
+                <MaterialIcons name="lock" size={20} color={theme.colors.success} />
+              </View>
               <TextInput
-                style={[styles.input, { color: theme.colors.text }]}
+                style={[styles.input, { color: theme.colors.inputText }]}
                 placeholder="Password (min 6 characters)"
-                placeholderTextColor={theme.colors.textSecondary}
+                placeholderTextColor={theme.colors.inputPlaceholder}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoComplete="password"
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+              >
                 <MaterialIcons
                   name={showPassword ? 'visibility-off' : 'visibility'}
                   size={20}
-                  color={theme.colors.textSecondary}
+                  color={theme.colors.textMuted}
                 />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity onPress={handleSignUp} disabled={loading}>
+            {/* Sign Up Button with Gradient */}
+            <TouchableOpacity onPress={handleSignUp} disabled={loading} activeOpacity={0.8}>
               <LinearGradient
-                colors={[theme.colors.primary, theme.colors.secondary]}
+                colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.signUpButton}
+                end={{ x: 1, y: 1 }}
+                style={[
+                  styles.signUpButton,
+                  loading && { opacity: 0.7 },
+                ]}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
@@ -173,13 +252,25 @@ export default function SignUpScreen() {
                 )}
               </LinearGradient>
             </TouchableOpacity>
+
+            {/* Terms & Privacy */}
+            <Text style={[styles.termsText, { color: theme.colors.textMuted }]}>
+              By signing up, you agree to our{' '}
+              <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>
+                Terms of Service
+              </Text>{' '}
+              and{' '}
+              <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>
+                Privacy Policy
+              </Text>
+            </Text>
           </MotiView>
 
           {/* Footer */}
           <MotiView
             from={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 400, duration: 600 }}
+            transition={{ delay: 600, duration: 600 }}
             style={styles.footer}
           >
             <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>
@@ -221,10 +312,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   title: {
     fontSize: 28,
@@ -234,6 +325,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     textAlign: 'center',
+    fontWeight: '500',
   },
   form: {
     gap: 14,
@@ -242,32 +334,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    height: 56,
+    height: 60,
     borderRadius: 16,
     gap: 12,
+    borderWidth: 1,
+  },
+  iconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   input: {
     flex: 1,
     fontSize: 16,
+    fontWeight: '500',
+  },
+  eyeButton: {
+    padding: 4,
   },
   signUpButton: {
     flexDirection: 'row',
-    height: 56,
+    height: 60,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
     marginTop: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   signUpButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
+  },
+  termsText: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 8,
   },
   footer: {
     flexDirection: 'row',

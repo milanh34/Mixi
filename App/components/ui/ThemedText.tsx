@@ -23,7 +23,12 @@ export const getFontFamily = (family: string, weight: string): string | undefine
 };
 
 export function ThemedText(props: TextProps) {
-  const { fontFamily, fontWeight } = useThemeStore();
+  const store = useThemeStore();
+  
+  // Safely access fontFamily and fontWeight with defaults
+  const fontFamily = (store as any).fontFamily || 'System';
+  const fontWeight = (store as any).fontWeight || '400';
+  
   const dynamicFont = getFontFamily(fontFamily, fontWeight);
   
   return (

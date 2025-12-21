@@ -7,16 +7,15 @@ import { ReactNode } from 'react';
 interface GradientCardProps {
   children: ReactNode;
   style?: any;
-  gradient?: string[];
+  gradient?: [string, string, ...string[]]; 
 }
 
 export function GradientCard({ children, style, gradient }: GradientCardProps) {
   const { theme } = useThemeStore();
 
-  const defaultGradient = [
-    theme.colors.primary + 'DD',
-    theme.colors.primary + '88',
-    theme.colors.primary + '44',
+  const defaultGradient: [string, string] = [
+    theme.colors.gradientStart,
+    theme.colors.gradientEnd,
   ];
 
   return (
@@ -37,6 +36,11 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   gradient: {
     padding: 20,

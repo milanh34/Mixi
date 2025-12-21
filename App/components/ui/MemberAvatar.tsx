@@ -1,5 +1,6 @@
 // components/ui/MemberAvatar.tsx
 import { View, Text, StyleSheet, Image } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useThemeStore } from '../../stores/themeStore';
 
@@ -29,36 +30,65 @@ export function MemberAvatar({ name, photo, size = 'medium', showName = false }:
     .toUpperCase()
     .slice(0, 2);
 
+  // Generate consistent color based on name
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      theme.colors.primary,
+      theme.colors.secondary,
+      theme.colors.accent,
+      theme.colors.success,
+      theme.colors.warning,
+      theme.colors.error,
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+
+  const avatarColor = getAvatarColor(name);
+
   return (
     <View style={styles.container}>
       {photo ? (
-        <Image
-          source={{ uri: photo }}
-          style={[
-            styles.avatar,
-            { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 },
-          ]}
-        />
-      ) : (
         <View
           style={[
-            styles.avatar,
+            styles.imageWrapper,
+            {
+              width: avatarSize,
+              height: avatarSize,
+              borderRadius: avatarSize / 2,
+              borderColor: theme.colors.cardBorder,
+            },
+          ]}
+        >
+          <Image
+            source={{ uri: photo }}
+            style={[
+              styles.avatar,
+              { width: avatarSize - 4, height: avatarSize - 4, borderRadius: (avatarSize - 4) / 2 },
+            ]}
+          />
+        </View>
+      ) : (
+        <LinearGradient
+          colors={[avatarColor + 'DD', avatarColor + '88']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
             styles.placeholder,
             {
               width: avatarSize,
               height: avatarSize,
               borderRadius: avatarSize / 2,
-              backgroundColor: theme.colors.primary + '20',
             },
           ]}
         >
-          <Text style={[styles.initials, { fontSize, color: theme.colors.primary }]}>
+          <Text style={[styles.initials, { fontSize, color: '#FFFFFF' }]}>
             {initials}
           </Text>
-        </View>
+        </LinearGradient>
       )}
       {showName && (
-        <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
+        <Text style={[styles.name, { color: theme.colors.textPrimary }]} numberOfLines={1}>
           {name}
         </Text>
       )}
@@ -70,19 +100,31 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
   },
+  imageWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    backgroundColor: '#FFFFFF',
+  },
   avatar: {
     backgroundColor: '#E0E0E0',
   },
   placeholder: {
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   initials: {
     fontWeight: '700',
   },
   name: {
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: '600',
+    marginTop: 6,
     maxWidth: 80,
   },
 });

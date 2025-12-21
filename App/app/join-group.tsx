@@ -1,278 +1,296 @@
-// app/join-group.tsx
+// app/group/create.tsx
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
-  Alert,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   ActivityIndicator,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import { useThemeStore } from '../stores/themeStore';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../stores/authStore';
-import { QRScanner } from '../components/QRScanner';
-import { joinGroupByCode } from '../lib/groupJoin';
+import { useThemeStore } from '../stores/themeStore';
+import { useGroupStore } from '../stores/groupStore';
+import { useToast } from '../utils/toastManager';
 import { MotiView } from 'moti';
+import { Group } from '../lib/schema';
 import * as Haptics from 'expo-haptics';
 
-export default function JoinGroupScreen() {
+const GROUP_TYPES: Group['type'][] = ['trip', 'project', 'household', 'event'];
+const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD'];
+
+const TYPE_ICONS: Record<Group['type'], keyof typeof MaterialIcons.glyphMap> = {
+  trip: 'flight',
+  project: 'work',
+  household: 'home',
+  event: 'event',
+};
+
+export default function CreateGroupScreen() {
   const router = useRouter();
-  const { theme } = useThemeStore();
   const { user } = useAuthStore();
+  const { theme } = useThemeStore();
+  const { createGroup, loading } = useGroupStore();
+  const { showToast } = useToast();
 
-  const [mode, setMode] = useState<'select' | 'qr' | 'code'>('select');
-  const [groupCode, setGroupCode] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState<Group['type']>('trip');
+  const [currency, setCurrency] = useState('INR');
 
-  const handleCodeSubmit = async () => {
-    if (!groupCode.trim()) {
-      Alert.alert('Error', 'Please enter a group code');
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      showToast('Please enter a group name', 'error');
       return;
     }
 
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in to join a group');
+    if (name.trim().length < 3) {
+      showToast('Group name must be at least 3 characters', 'error');
       return;
     }
 
-    setLoading(true);
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!user) return;
 
     try {
-      const result = await joinGroupByCode(groupCode.trim().toUpperCase(), user.uid, user.name);
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const groupId = await createGroup(
+        user.uid,
+        name.trim(),
+        type,
+        currency,
+        description.trim()
+      );
       
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', `Joined "${result.groupName}" successfully!`, [
-        {
-          text: 'View Group',
-          onPress: () => {
-            router.replace({
-              pathname: '/group/[id]',
-              params: { id: result.groupId },
-            });
-          },
-        },
-      ]);
+      showToast('Group created successfully!', 'success');
+      router.replace(`/group/${groupId}` as any);
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
+      showToast(error.message || 'Failed to create group', 'error');
     }
   };
-
-  const handleQRScanned = async (data: string) => {
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in to join a group');
-      return;
-    }
-
-    setLoading(true);
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      // Extract code from QR data (format: mixi://join/GROUP_CODE or just GROUP_CODE)
-      const code = data.includes('mixi://join/')
-        ? data.split('mixi://join/')[1]
-        : data;
-
-      const result = await joinGroupByCode(code.trim().toUpperCase(), user.uid, user.name);
-      
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', `Joined "${result.groupName}" successfully!`, [
-        {
-          text: 'View Group',
-          onPress: () => {
-            router.replace({
-              pathname: '/group/[id]',
-              params: { id: result.groupId },
-            });
-          },
-        },
-      ]);
-    } catch (error: any) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
-      setMode('select');
-    }
-  };
-
-  if (mode === 'qr') {
-    return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        edges={['top']}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setMode('select')}>
-            <MaterialIcons name="arrow-back" size={28} color={theme.colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-            Scan QR Code
-          </Text>
-          <View style={{ width: 28 }} />
-        </View>
-
-        <QRScanner onScanned={handleQRScanned} />
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={['top']}
     >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <MaterialIcons name="close" size={28} color={theme.colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          Join Group
-        </Text>
-        <View style={{ width: 28 }} />
-      </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        {/* Header with Gradient */}
+        <LinearGradient
+          colors={[theme.colors.gradientStart + '15', theme.colors.background]}
+          style={styles.headerGradient}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+              <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              Create Group
+            </Text>
+            
+            <View style={{ width: 40 }} />
+          </View>
+        </LinearGradient>
 
-      <View style={styles.content}>
-        {mode === 'select' ? (
-          <>
-            <MotiView
-              from={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', duration: 600 }}
-            >
-              <Text style={[styles.title, { color: theme.colors.text }]}>
-                How would you like to join?
-              </Text>
-            </MotiView>
-
-            <MotiView
-              from={{ opacity: 0, translateY: 20 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'spring', duration: 600, delay: 200 }}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                onPress={() => setMode('qr')}
-                activeOpacity={0.7}
-              >
-                <View
-                  style={[
-                    styles.iconContainer,
-                    { backgroundColor: theme.colors.primary + '20' },
-                  ]}
-                >
-                  <MaterialIcons name="qr-code-scanner" size={48} color={theme.colors.primary} />
-                </View>
-                <Text style={[styles.optionTitle, { color: theme.colors.text }]}>
-                  Scan QR Code
-                </Text>
-                <Text style={[styles.optionDescription, { color: theme.colors.textSecondary }]}>
-                  Scan a QR code shared by group admin
-                </Text>
-              </TouchableOpacity>
-            </MotiView>
-
-            <MotiView
-              from={{ opacity: 0, translateY: 20 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'spring', duration: 600, delay: 400 }}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                onPress={() => setMode('code')}
-                activeOpacity={0.7}
-              >
-                <View
-                  style={[
-                    styles.iconContainer,
-                    { backgroundColor: theme.colors.primary + '20' },
-                  ]}
-                >
-                  <MaterialIcons name="vpn-key" size={48} color={theme.colors.primary} />
-                </View>
-                <Text style={[styles.optionTitle, { color: theme.colors.text }]}>
-                  Enter Group Code
-                </Text>
-                <Text style={[styles.optionDescription, { color: theme.colors.textSecondary }]}>
-                  Type in the 8-character group code
-                </Text>
-              </TouchableOpacity>
-            </MotiView>
-          </>
-        ) : (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <MotiView
-            from={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', duration: 600 }}
-            style={styles.codeForm}
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400 }}
           >
-            <View
-              style={[
-                styles.codeInputContainer,
-                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-              ]}
-            >
-              <MaterialIcons name="vpn-key" size={24} color={theme.colors.primary} />
+            {/* Group Name */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                Group Name *
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: theme.colors.inputBackground,
+                    borderColor: theme.colors.inputBorder,
+                  },
+                ]}
+              >
+                <MaterialIcons name="group" size={20} color={theme.colors.textMuted} />
+                <TextInput
+                  style={[styles.input, { color: theme.colors.inputText }]}
+                  placeholder="e.g., Trip to Goa"
+                  placeholderTextColor={theme.colors.inputPlaceholder}
+                  value={name}
+                  onChangeText={setName}
+                />
+              </View>
+            </View>
+
+            {/* Description */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                Description (Optional)
+              </Text>
               <TextInput
-                style={[styles.codeInput, { color: theme.colors.text }]}
-                placeholder="MIXI-XXXXXX"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={groupCode}
-                onChangeText={(text) => setGroupCode(text.toUpperCase())}
-                autoCapitalize="characters"
-                maxLength={13}
-                autoFocus
+                style={[
+                  styles.textArea,
+                  {
+                    backgroundColor: theme.colors.inputBackground,
+                    color: theme.colors.inputText,
+                    borderColor: theme.colors.inputBorder,
+                  },
+                ]}
+                placeholder="Add details about this group..."
+                placeholderTextColor={theme.colors.inputPlaceholder}
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={4}
               />
             </View>
 
-            <TouchableOpacity
+            {/* Group Type */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                Group Type
+              </Text>
+              <View style={styles.typeGrid}>
+                {GROUP_TYPES.map((groupType) => (
+                  <TouchableOpacity
+                    key={groupType}
+                    style={[
+                      styles.typeButton,
+                      {
+                        backgroundColor:
+                          type === groupType
+                            ? theme.colors.primary + '20'
+                            : theme.colors.cardBackground,
+                        borderColor:
+                          type === groupType
+                            ? theme.colors.primary
+                            : theme.colors.cardBorder,
+                      },
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setType(groupType);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons
+                      name={TYPE_ICONS[groupType]}
+                      size={24}
+                      color={type === groupType ? theme.colors.primary : theme.colors.textMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.typeText,
+                        {
+                          color:
+                            type === groupType
+                              ? theme.colors.primary
+                              : theme.colors.textPrimary,
+                        },
+                      ]}
+                    >
+                      {groupType}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Currency */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                Currency
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.currencyRow}
+              >
+                {CURRENCIES.map((curr) => (
+                  <TouchableOpacity
+                    key={curr}
+                    style={[
+                      styles.currencyButton,
+                      {
+                        backgroundColor:
+                          currency === curr
+                            ? theme.colors.primary
+                            : theme.colors.cardBackground,
+                        borderColor:
+                          currency === curr
+                            ? theme.colors.primary
+                            : theme.colors.cardBorder,
+                      },
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setCurrency(curr);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.currencyText,
+                        {
+                          color:
+                            currency === curr ? '#FFFFFF' : theme.colors.textPrimary,
+                          fontWeight: currency === curr ? '700' : '600',
+                        },
+                      ]}
+                    >
+                      {curr}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </MotiView>
+        </ScrollView>
+
+        {/* Create Button with Gradient */}
+        <View style={[styles.footer, { backgroundColor: theme.colors.background }]}>
+          <TouchableOpacity
+            onPress={handleCreate}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
               style={[
-                styles.submitButton,
-                { backgroundColor: theme.colors.primary },
+                styles.createButton,
+                loading && { opacity: 0.7 },
               ]}
-              onPress={handleCodeSubmit}
-              disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.submitButtonText}>Join Group</Text>
+                <>
+                  <Text style={styles.createButtonText}>Create Group</Text>
+                  <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                </>
               )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => {
-                setMode('select');
-                setGroupCode('');
-              }}
-            >
-              <Text style={[styles.backButtonText, { color: theme.colors.textSecondary }]}>
-                Back to options
-              </Text>
-            </TouchableOpacity>
-          </MotiView>
-        )}
-      </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -281,86 +299,130 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  keyboardView: {
+    flex: 1,
+  },
+  headerGradient: {
+    paddingBottom: 12,
+  },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingVertical: 16,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
   },
   content: {
-    flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingTop: 8,
+    paddingBottom: 120,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 40,
-  },
-  optionCard: {
-    padding: 32,
-    borderRadius: 24,
-    borderWidth: 2,
-    alignItems: 'center',
+  section: {
     marginBottom: 24,
   },
-  iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
   },
-  optionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  optionDescription: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  codeForm: {
-    gap: 20,
-  },
-  codeInputContainer: {
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 56,
+    borderRadius: 16,
+    paddingHorizontal: 16,
     gap: 12,
-    padding: 20,
+    borderWidth: 1,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  textArea: {
+    height: 120,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    fontSize: 16,
+    borderWidth: 1,
+    textAlignVertical: 'top',
+  },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  typeButton: {
+    flex: 1,
+    minWidth: '45%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 2,
   },
-  codeInput: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 2,
+  typeText: {
+    fontSize: 15,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
-  submitButton: {
+  currencyRow: {
+    gap: 10,
+    paddingRight: 24,
+  },
+  currencyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 2,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  currencyText: {
+    fontSize: 15,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+    paddingBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  createButton: {
+    flexDirection: 'row',
     height: 56,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  submitButtonText: {
+  createButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
-  },
-  backButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    fontSize: 15,
   },
 });
