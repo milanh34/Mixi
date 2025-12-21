@@ -1,3 +1,4 @@
+// hooks/useRealTimeGroups.ts
 import { useEffect } from 'react';
 import {
   collection,

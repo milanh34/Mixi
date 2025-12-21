@@ -1,3 +1,4 @@
+// app/join-group.tsx
 import {
   View,
   Text,

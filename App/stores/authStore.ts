@@ -1,3 +1,4 @@
+// stores/authStore.ts
 import { create } from "zustand";
 import {
   createUserWithEmailAndPassword,

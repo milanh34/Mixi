@@ -1,3 +1,4 @@
+// components/QRScanner.tsx
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialIcons } from '@expo/vector-icons';

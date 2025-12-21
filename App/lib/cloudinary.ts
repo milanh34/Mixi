@@ -1,3 +1,4 @@
+// lib/cloudinary.ts
 import Constants from 'expo-constants';
 
 const CLOUDINARY_CLOUD_NAME = 

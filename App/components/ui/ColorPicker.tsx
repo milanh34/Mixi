@@ -1,3 +1,4 @@
+// components/ui/ColorPicker.tsx
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
 

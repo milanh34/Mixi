@@ -1,3 +1,4 @@
+// components/ui/TimelineEvent.tsx
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { GroupTimelineEvent } from '../../lib/schema';

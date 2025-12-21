@@ -1,3 +1,4 @@
+// lib/firebase.ts
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { Auth, initializeAuth, getAuth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';

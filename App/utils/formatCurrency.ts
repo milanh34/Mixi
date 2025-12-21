@@ -1,3 +1,4 @@
+// utils/formatCurrency.ts
 export const formatCurrency = (amount: number, currency: string = 'INR'): string => {
   const currencySymbols: Record<string, string> = {
     INR: '₹',

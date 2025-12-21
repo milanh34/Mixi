@@ -1,3 +1,4 @@
+// app/group/invite/[id].tsx
 import {
   View,
   Text,

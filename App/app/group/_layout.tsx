@@ -1,3 +1,4 @@
+// app/group/_layout.tsx
 import { Stack } from 'expo-router';
 import { useThemeStore } from '../../stores/themeStore';
 

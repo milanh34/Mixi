@@ -1,3 +1,4 @@
+// components/ui/GlassmorphicCard.tsx
 import { View, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useThemeStore } from '../../stores/themeStore';

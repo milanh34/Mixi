@@ -1,3 +1,4 @@
+// app/(tabs)/customize.tsx
 import {
   View,
   Text,

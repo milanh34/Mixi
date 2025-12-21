@@ -1,3 +1,4 @@
+// components/ui/ThemeText.tsx
 import { Text as RNText, TextProps, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
 

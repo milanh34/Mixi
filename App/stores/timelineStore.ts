@@ -1,3 +1,4 @@
+// stores/timelineStore.ts
 import { create } from 'zustand';
 import {
   collection,

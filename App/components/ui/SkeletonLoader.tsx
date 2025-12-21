@@ -1,3 +1,4 @@
+// components/ui/SkeletonLoader.tsx
 import { View, StyleSheet } from 'react-native';
 import { MotiView } from 'moti';
 import { useThemeStore } from '../../stores/themeStore';

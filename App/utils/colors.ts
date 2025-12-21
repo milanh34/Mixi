@@ -1,3 +1,4 @@
+// utils/colors.ts
 import { ColorValue } from 'react-native';
 
 export const getGroupTypeEmoji = (type: string): string => {

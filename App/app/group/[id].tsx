@@ -1,3 +1,4 @@
+// app/group/[id].tsx
 import {
   View,
   Text,

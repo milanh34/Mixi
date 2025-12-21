@@ -1,3 +1,4 @@
+// components/ui/GroupCard.tsx
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Group } from '../../lib/schema';

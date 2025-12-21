@@ -1,3 +1,4 @@
+// app/profile.tsx
 import {
   View,
   Text,

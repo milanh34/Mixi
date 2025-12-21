@@ -1,3 +1,4 @@
+// utils/expenseCategories.ts
 export const EXPENSE_CATEGORIES = [
   { id: 'food', label: 'Food & Dining', icon: 'restaurant' },
   { id: 'transport', label: 'Transport', icon: 'directions-car' },

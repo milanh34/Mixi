@@ -1,3 +1,4 @@
+// components/ui/MemberAvatar.tsx
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useThemeStore } from '../../stores/themeStore';

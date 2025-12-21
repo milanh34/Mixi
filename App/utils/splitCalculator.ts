@@ -1,3 +1,4 @@
+// utils/splitCalculator.ts
 import { ExpenseSplit } from '../lib/schema';
 
 export const calculateEqualSplit = (

@@ -1,3 +1,4 @@
+// components/ui/GradientCard.tsx
 import { View, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useThemeStore } from '../../stores/themeStore';

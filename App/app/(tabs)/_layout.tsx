@@ -1,3 +1,4 @@
+// app/(tabs)/_layout.tsx
 import { Tabs, Redirect, useSegments, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect } from 'react';

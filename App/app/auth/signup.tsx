@@ -1,3 +1,4 @@
+// app/auth/signup.tsx
 import {
   View,
   Text,

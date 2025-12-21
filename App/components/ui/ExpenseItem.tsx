@@ -1,3 +1,4 @@
+// components/ui/ExpenseItem.tsx
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { GroupExpense } from '../../lib/schema';

@@ -1,3 +1,4 @@
+// components/ui/EmptyState.tsx
 import { View, Text, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { MotiView } from 'moti';

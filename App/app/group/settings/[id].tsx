@@ -1,0 +1,1 @@
+// app/group/settings/[id].tsx

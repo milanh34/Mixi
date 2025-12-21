@@ -1,3 +1,4 @@
+// stores/groupStore.ts
 import { create } from "zustand";
 import {
   collection,

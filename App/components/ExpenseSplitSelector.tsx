@@ -1,3 +1,4 @@
+// components/ExpenseSplitSelector.tsx
 import {
   View,
   Text,

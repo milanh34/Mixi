@@ -1,3 +1,4 @@
+// lib/groupJoin.ts
 import {
   doc,
   getDoc,
