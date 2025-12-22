@@ -1,50 +1,77 @@
-import express from "express";
-import cors from "cors";
-import cookieParser from "cookie-parser";
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import http from 'http';
+import path from 'path';
+
+// Local imports
+import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js';
+import groupRoutes from './routes/group.routes.js';
+import expenseRoutes from './routes/expense.routes.js';
+import timelineRoutes from './routes/timeline.routes.js';
+
+// Initialize environment variables
+dotenv.config();
 
 const app = express();
 
+// Middleware
+app.use(helmet());
 app.use(cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials: true
-}))
+  origin: process.env.CLIENT_URL || 'http://localhost:19006',
+  credentials: true
+}));
+app.use(morgan('combined'));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
-app.use(express.json({
-    limit: "16kb"
-}))
+// File upload middleware
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-app.use(express.urlencoded({
-    extended: true,
-    limit: "16kb"
-}))
+// MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('✅ MongoDB connected successfully');
+  })
+  .catch((error) => {
+    console.error('❌ MongoDB connection error:', error);
+    process.exit(1);
+  });
 
-app.use(express.static("public"))
+// API Routes - COMPLETE MIXI BACKEND
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/groups', groupRoutes);
+app.use('/api/expenses', expenseRoutes); 
+app.use('/api/timeline', timelineRoutes);
 
-app.use(cookieParser())
+// Health check
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+  });
+});
 
-// import routes
-import userRouter from "./routes/user.routes.js";
-import subscriptionRouter from "./routes/subscription.routes.js";
-import reviewRouter from "./routes/review.routes.js";
-import healthRouter from "./routes/health.routes.js";
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'API route not found'
+  });
+});
 
-// declare routes
-app.use("/api/v1/users", userRouter);
-app.use("/api/v1/subscriptions", subscriptionRouter);
-app.use("/api/v1/reviews", reviewRouter);
-app.use("/api/v1/health", healthRouter);
+const PORT = process.env.PORT || 5000;
 
-if (process.env.RENDER === "true") {
-    setInterval(() => {
-        fetch(`${process.env.HEALTH_URL || "http://localhost:8000/api/v1/health"}`)
-            .then(res => res.json())
-            .then(data => {
-                console.log("Health ping:", data);
-            })
-            .catch(err => {
-                console.error("Health ping failed:", err);
-            });
-    }, 10 * 60 * 1000);
-}
+const server = http.createServer(app);
 
-export { app }
+server.listen(PORT, () => {
+  console.log(`🚀 Mixi Backend running on port ${PORT}`);
+  console.log(`📊 Health: http://localhost:${PORT}/api/health`);
+});
