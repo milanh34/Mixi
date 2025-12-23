@@ -1,16 +1,17 @@
 // hooks/useImagePicker.ts
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert } from 'react-native';
+import { useToast } from '../utils/toastManager';
 import { uploadToCloudinary } from '../lib/cloudinary';
 
 export const useImagePicker = () => {
   const [uploading, setUploading] = useState(false);
+  const { showToast } = useToast();
 
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please allow access to your photos');
+      showToast('Please allow access to your photos', 'warning');
       return false;
     }
     return true;
@@ -41,7 +42,7 @@ export const useImagePicker = () => {
     } catch (error) {
       console.error('Image picker error:', error);
       setUploading(false);
-      Alert.alert('Error', 'Failed to upload image');
+      showToast('Failed to upload image', 'error');
       return null;
     }
   };
@@ -50,7 +51,7 @@ export const useImagePicker = () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to your camera');
+        showToast('Please allow access to your camera', 'warning');
         return null;
       }
 
@@ -73,7 +74,7 @@ export const useImagePicker = () => {
     } catch (error) {
       console.error('Camera error:', error);
       setUploading(false);
-      Alert.alert('Error', 'Failed to upload photo');
+      showToast('Failed to upload photo', 'error');
       return null;
     }
   };

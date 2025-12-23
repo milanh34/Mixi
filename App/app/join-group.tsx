@@ -2,79 +2,142 @@
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
-  ScrollView,
+  TouchableOpacity,
+  TextInput,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useGroupStore } from '../stores/groupStore';
 import { useToast } from '../utils/toastManager';
+import { joinGroupByCode } from '../lib/groupJoin';
 import { MotiView } from 'moti';
-import { Group } from '../lib/schema';
 import * as Haptics from 'expo-haptics';
 
-const GROUP_TYPES: Group['type'][] = ['trip', 'project', 'household', 'event'];
-const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD'];
+type Mode = 'menu' | 'qr' | 'code';
 
-const TYPE_ICONS: Record<Group['type'], keyof typeof MaterialIcons.glyphMap> = {
-  trip: 'flight',
-  project: 'work',
-  household: 'home',
-  event: 'event',
-};
-
-export default function CreateGroupScreen() {
+export default function JoinGroupScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { theme } = useThemeStore();
-  const { createGroup, loading } = useGroupStore();
   const { showToast } = useToast();
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [type, setType] = useState<Group['type']>('trip');
-  const [currency, setCurrency] = useState('INR');
+  const [mode, setMode] = useState<Mode>('menu');
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+  const [groupCode, setGroupCode] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      showToast('Please enter a group name', 'error');
+  const handleQRModePress = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        showToast('Camera permission required to scan QR codes', 'warning', {
+          confirmAction: async () => {
+            await requestPermission();
+          },
+          confirmText: 'Grant Permission'
+        });
+        return;
+      }
+    }
+
+    setMode('qr');
+    setScanned(false);
+  };
+
+  const handleCodeModePress = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setMode('code');
+  };
+
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+    if (scanned) return;
+
+    setScanned(true);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Extract code from QR data (expects format: "MIXI-XXXXXX" or full URL)
+    let code = data;
+    if (data.includes('MIXI-')) {
+      const match = data.match(/MIXI-[A-Z0-9]{6,}/);
+      if (match) {
+        code = match[0];
+      }
+    }
+
+    await handleJoinGroup(code);
+  };
+
+  const handleManualJoin = async () => {
+    if (!groupCode.trim()) {
+      showToast('Please enter a group code', 'error');
       return;
     }
 
-    if (name.trim().length < 3) {
-      showToast('Group name must be at least 3 characters', 'error');
+    const formattedCode = groupCode.trim().toUpperCase();
+    if (!formattedCode.startsWith('MIXI-')) {
+      showToast('Invalid code format. Code should start with MIXI-', 'error');
       return;
     }
 
-    if (!user) return;
+    await handleJoinGroup(formattedCode);
+  };
+
+  const handleJoinGroup = async (code: string) => {
+    if (!user) {
+      showToast('Please sign in to join groups', 'error');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      
-      const groupId = await createGroup(
-        user.uid,
-        name.trim(),
-        type,
-        currency,
-        description.trim()
-      );
-      
+
+      const result = await joinGroupByCode(code, user.uid, user.name);
+
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast('Group created successfully!', 'success');
-      router.replace(`/group/${groupId}` as any);
+      showToast(`Joined ${result.groupName}!`, 'success');
+
+      // Navigate to group detail
+      setTimeout(() => {
+        router.replace({
+          pathname: '/group/[id]',
+          params: { id: result.groupId },
+        });
+      }, 500);
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast(error.message || 'Failed to create group', 'error');
+      console.error('Join group error:', error);
+      showToast(error.message || 'Failed to join group', 'error');
+
+      // Reset for retry
+      setScanned(false);
+      setGroupCode('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBack = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (mode === 'menu') {
+      router.back();
+    } else {
+      setMode('menu');
+      setScanned(false);
+      setGroupCode('');
     }
   };
 
@@ -83,213 +146,272 @@ export default function CreateGroupScreen() {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={['top']}
     >
+      {/* Header */}
+      <LinearGradient
+        colors={[theme.colors.gradientStart + '15', theme.colors.background]}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <MaterialIcons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+
+          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+            Join Group
+          </Text>
+
+          <View style={{ width: 40 }} />
+        </View>
+      </LinearGradient>
+
+      {/* Content */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={styles.content}
       >
-        {/* Header with Gradient */}
-        <LinearGradient
-          colors={[theme.colors.gradientStart + '15', theme.colors.background]}
-          style={styles.headerGradient}
-        >
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-              <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
-            </TouchableOpacity>
-            
-            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-              Create Group
-            </Text>
-            
-            <View style={{ width: 40 }} />
-          </View>
-        </LinearGradient>
+        {mode === 'menu' && (
+          <MotiView
+            from={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', duration: 400 }}
+            style={styles.menuContainer}
+          >
+            <View style={styles.iconCircle}>
+              <LinearGradient
+                colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+                style={styles.iconGradient}
+              >
+                <MaterialIcons name="group-add" size={56} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
 
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
+              Join a Group
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+              Choose how you want to join an existing group
+            </Text>
+
+            {/* QR Code Option */}
+            <TouchableOpacity
+              style={[
+                styles.optionCard,
+                {
+                  backgroundColor: theme.colors.cardBackground,
+                  borderColor: theme.colors.cardBorder,
+                },
+              ]}
+              onPress={handleQRModePress}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.optionIcon,
+                  { backgroundColor: theme.colors.primary + '20' },
+                ]}
+              >
+                <MaterialIcons name="qr-code-scanner" size={32} color={theme.colors.primary} />
+              </View>
+              <View style={styles.optionContent}>
+                <Text style={[styles.optionTitle, { color: theme.colors.textPrimary }]}>
+                  Scan QR Code
+                </Text>
+                <Text style={[styles.optionDescription, { color: theme.colors.textSecondary }]}>
+                  Use your camera to scan a group's QR code
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+
+            {/* Manual Code Option */}
+            <TouchableOpacity
+              style={[
+                styles.optionCard,
+                {
+                  backgroundColor: theme.colors.cardBackground,
+                  borderColor: theme.colors.cardBorder,
+                },
+              ]}
+              onPress={handleCodeModePress}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.optionIcon,
+                  { backgroundColor: theme.colors.success + '20' },
+                ]}
+              >
+                <MaterialIcons name="vpn-key" size={32} color={theme.colors.success} />
+              </View>
+              <View style={styles.optionContent}>
+                <Text style={[styles.optionTitle, { color: theme.colors.textPrimary }]}>
+                  Enter Code
+                </Text>
+                <Text style={[styles.optionDescription, { color: theme.colors.textSecondary }]}>
+                  Manually type the group code
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          </MotiView>
+        )}
+
+        {mode === 'qr' && (
           <MotiView
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 400 }}
+            transition={{ type: 'timing', duration: 300 }}
+            style={styles.scannerContainer}
           >
-            {/* Group Name */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                Group Name *
-              </Text>
-              <View
-                style={[
-                  styles.inputContainer,
-                  {
-                    backgroundColor: theme.colors.inputBackground,
-                    borderColor: theme.colors.inputBorder,
-                  },
-                ]}
-              >
-                <MaterialIcons name="group" size={20} color={theme.colors.textMuted} />
-                <TextInput
-                  style={[styles.input, { color: theme.colors.inputText }]}
-                  placeholder="e.g., Trip to Goa"
-                  placeholderTextColor={theme.colors.inputPlaceholder}
-                  value={name}
-                  onChangeText={setName}
+            {!permission?.granted ? (
+              <View style={styles.permissionDenied}>
+                <MaterialIcons
+                  name="camera-alt"
+                  size={64}
+                  color={theme.colors.textMuted}
                 />
+                <Text style={[styles.permissionText, { color: theme.colors.textPrimary }]}>
+                  Camera permission required
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.permissionButton,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                  onPress={requestPermission}
+                >
+                  <Text style={styles.permissionButtonText}>Grant Permission</Text>
+                </TouchableOpacity>
               </View>
-            </View>
-
-            {/* Description */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                Description (Optional)
-              </Text>
-              <TextInput
-                style={[
-                  styles.textArea,
-                  {
-                    backgroundColor: theme.colors.inputBackground,
-                    color: theme.colors.inputText,
-                    borderColor: theme.colors.inputBorder,
-                  },
-                ]}
-                placeholder="Add details about this group..."
-                placeholderTextColor={theme.colors.inputPlaceholder}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-
-            {/* Group Type */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                Group Type
-              </Text>
-              <View style={styles.typeGrid}>
-                {GROUP_TYPES.map((groupType) => (
-                  <TouchableOpacity
-                    key={groupType}
-                    style={[
-                      styles.typeButton,
-                      {
-                        backgroundColor:
-                          type === groupType
-                            ? theme.colors.primary + '20'
-                            : theme.colors.cardBackground,
-                        borderColor:
-                          type === groupType
-                            ? theme.colors.primary
-                            : theme.colors.cardBorder,
-                      },
-                    ]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setType(groupType);
+            ) : (
+              <>
+                <View style={styles.scannerFrame}>
+                  <CameraView
+                    style={StyleSheet.absoluteFillObject}
+                    facing="back"
+                    onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                    barcodeScannerSettings={{
+                      barcodeTypes: ['qr'],
                     }}
-                    activeOpacity={0.7}
-                  >
-                    <MaterialIcons
-                      name={TYPE_ICONS[groupType]}
-                      size={24}
-                      color={type === groupType ? theme.colors.primary : theme.colors.textMuted}
-                    />
-                    <Text
-                      style={[
-                        styles.typeText,
-                        {
-                          color:
-                            type === groupType
-                              ? theme.colors.primary
-                              : theme.colors.textPrimary,
-                        },
-                      ]}
-                    >
-                      {groupType}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+                  />
 
-            {/* Currency */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                Currency
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.currencyRow}
-              >
-                {CURRENCIES.map((curr) => (
+                  {/* Scanning Overlay */}
+                  <View style={styles.scannerOverlay}>
+                    <View style={styles.scannerCorners}>
+                      {/* Top-left corner */}
+                      <View style={[styles.corner, styles.cornerTL, { borderColor: theme.colors.primary }]} />
+                      {/* Top-right corner */}
+                      <View style={[styles.corner, styles.cornerTR, { borderColor: theme.colors.primary }]} />
+                      {/* Bottom-left corner */}
+                      <View style={[styles.corner, styles.cornerBL, { borderColor: theme.colors.primary }]} />
+                      {/* Bottom-right corner */}
+                      <View style={[styles.corner, styles.cornerBR, { borderColor: theme.colors.primary }]} />
+                    </View>
+                  </View>
+
+                  {loading && (
+                    <View style={styles.loadingOverlay}>
+                      <ActivityIndicator size="large" color="#FFFFFF" />
+                      <Text style={styles.loadingText}>Joining group...</Text>
+                    </View>
+                  )}
+                </View>
+
+                <Text style={[styles.scannerInstructions, { color: theme.colors.textSecondary }]}>
+                  Position the QR code within the frame
+                </Text>
+
+                {scanned && !loading && (
                   <TouchableOpacity
-                    key={curr}
-                    style={[
-                      styles.currencyButton,
-                      {
-                        backgroundColor:
-                          currency === curr
-                            ? theme.colors.primary
-                            : theme.colors.cardBackground,
-                        borderColor:
-                          currency === curr
-                            ? theme.colors.primary
-                            : theme.colors.cardBorder,
-                      },
-                    ]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setCurrency(curr);
-                    }}
-                    activeOpacity={0.7}
+                    style={[styles.rescanButton, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => setScanned(false)}
                   >
-                    <Text
-                      style={[
-                        styles.currencyText,
-                        {
-                          color:
-                            currency === curr ? '#FFFFFF' : theme.colors.textPrimary,
-                          fontWeight: currency === curr ? '700' : '600',
-                        },
-                      ]}
-                    >
-                      {curr}
-                    </Text>
+                    <MaterialIcons name="refresh" size={20} color="#FFFFFF" />
+                    <Text style={styles.rescanButtonText}>Scan Again</Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+                )}
+              </>
+            )}
           </MotiView>
-        </ScrollView>
+        )}
 
-        {/* Create Button with Gradient */}
-        <View style={[styles.footer, { backgroundColor: theme.colors.background }]}>
-          <TouchableOpacity
-            onPress={handleCreate}
-            disabled={loading}
-            activeOpacity={0.8}
+        {mode === 'code' && (
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300 }}
+            style={styles.codeContainer}
           >
-            <LinearGradient
-              colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+            <View
               style={[
-                styles.createButton,
-                loading && { opacity: 0.7 },
+                styles.codeIconContainer,
+                { backgroundColor: theme.colors.success + '20' },
               ]}
             >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Text style={styles.createButtonText}>Create Group</Text>
-                  <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+              <MaterialIcons name="vpn-key" size={48} color={theme.colors.success} />
+            </View>
+
+            <Text style={[styles.codeTitle, { color: theme.colors.textPrimary }]}>
+              Enter Group Code
+            </Text>
+            <Text style={[styles.codeSubtitle, { color: theme.colors.textSecondary }]}>
+              Ask the group admin for the invite code
+            </Text>
+
+            {/* Code Input */}
+            <View style={styles.codeInputContainer}>
+              <View
+                style={[
+                  styles.codeInputWrapper,
+                  {
+                    backgroundColor: theme.colors.inputBackground,
+                    borderColor: theme.colors.inputBorder,
+                  },
+                ]}
+              >
+                <MaterialIcons name="tag" size={20} color={theme.colors.textMuted} />
+                <TextInput
+                  style={[styles.codeInput, { color: theme.colors.inputText }]}
+                  placeholder="MIXI-XXXXXX"
+                  placeholderTextColor={theme.colors.inputPlaceholder}
+                  value={groupCode}
+                  onChangeText={setGroupCode}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={12}
+                />
+              </View>
+
+              <Text style={[styles.codeHint, { color: theme.colors.textMuted }]}>
+                Format: MIXI-XXXXXX (e.g., MIXI-A1B2C3)
+              </Text>
+            </View>
+
+            {/* Join Button */}
+            <TouchableOpacity
+              onPress={handleManualJoin}
+              disabled={loading || !groupCode.trim()}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+                style={[
+                  styles.joinButton,
+                  (!groupCode.trim() || loading) && { opacity: 0.5 },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Text style={styles.joinButtonText}>Join Group</Text>
+                    <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </MotiView>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -299,20 +421,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  keyboardView: {
-    flex: 1,
-  },
   headerGradient: {
     paddingBottom: 12,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 16,
   },
-  headerButton: {
+  backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
@@ -323,91 +442,231 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   content: {
+    flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 120,
   },
-  section: {
-    marginBottom: 24,
+  menuContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 60,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
+  iconCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignSelf: 'center',
+    marginBottom: 32,
+    overflow: 'hidden',
+  },
+  iconGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
     marginBottom: 12,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 56,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    gap: 12,
-    borderWidth: 1,
-  },
-  input: {
-    flex: 1,
+  subtitle: {
     fontSize: 16,
-    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 40,
+    lineHeight: 24,
   },
-  textArea: {
-    height: 120,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    fontSize: 16,
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 20,
     borderWidth: 1,
-    textAlignVertical: 'top',
-  },
-  typeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  typeButton: {
-    flex: 1,
-    minWidth: '45%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 2,
-  },
-  typeText: {
-    fontSize: 15,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  currencyRow: {
-    gap: 10,
-    paddingRight: 24,
-  },
-  currencyButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 2,
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  currencyText: {
-    fontSize: 15,
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
-    paddingBottom: 32,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 3,
   },
-  createButton: {
+  optionIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  optionContent: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  optionDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  scannerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannerFrame: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  scannerCorners: {
+    width: 250,
+    height: 250,
+    position: 'relative',
+  },
+  corner: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderWidth: 4,
+  },
+  cornerTL: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 8,
+  },
+  cornerTR: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 8,
+  },
+  cornerBL: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+  },
+  cornerBR: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 8,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  scannerInstructions: {
+    marginTop: 24,
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  rescanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  rescanButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  permissionDenied: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  permissionText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  permissionButton: {
+    marginTop: 16,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  permissionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  codeContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 60,
+  },
+  codeIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 32,
+  },
+  codeTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  codeSubtitle: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 40,
+    lineHeight: 22,
+  },
+  codeInputContainer: {
+    marginBottom: 32,
+  },
+  codeInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 60,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderWidth: 1,
+  },
+  codeInput: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  codeHint: {
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  joinButton: {
     flexDirection: 'row',
     height: 56,
     borderRadius: 16,
@@ -420,7 +679,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  createButtonText: {
+  joinButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',

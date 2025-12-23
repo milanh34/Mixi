@@ -26,54 +26,31 @@ export interface User {
   updatedAt: Timestamp;
 }
 
-export interface Group {
+export interface TravelGroup {
   id: string;
   name: string;
-  photo?: string;
   description?: string;
+  type: 'trip' | 'household' | 'couple' | 'friends' | 'project' | 'other';
   adminId: string;
-  type: 'trip' | 'project' | 'household' | 'event';
-  currency: string;
   memberCount: number;
+  currency: string;
+  photo?: string;
+  inviteCode: string;
   totalExpenses: number;
   totalBalance: number;
-  lastActivity: Timestamp;
-  isPrivate: boolean;
-  allowPersonalExpenses: boolean;
-  expenseSplitDefault: 'equal' | 'shares' | 'percent' | 'exact';
+  lastActivity?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
 export interface GroupMember {
-  groupId: string;
   userId: string;
-  role: 'admin' | 'member';
-  joinedAt: Timestamp;
   userName: string;
   userProfilePicture?: string;
-  receiveNotifications: boolean;
-  totalOwedToMe: number;
-  totalIOwe: number;
-  netBalance: number;
-}
-
-export interface GroupExpense {
-  id: string;
   groupId: string;
-  creatorId: string;
-  type: 'personal' | 'shared';
-  title: string;
-  amount: number;
-  currency: string;
-  category: string;
-  date: Timestamp;
-  description?: string;
-  receiptPhoto?: string | null;  // FIXED: Made optional with null
-  splitType: 'equal' | 'shares' | 'percent' | 'exact';
-  splitDetails: ExpenseSplit[];
-  settled: boolean;
-  createdAt: Timestamp;
+  role: 'admin' | 'member';
+  netBalance: number;
+  joinedAt: Timestamp;
 }
 
 export interface ExpenseSplit {
@@ -82,7 +59,44 @@ export interface ExpenseSplit {
   percent: number;
   exactAmount: number;
   paidBy: string;
-  owes: boolean;
+  paid: boolean; // Changed from optional to required
+}
+
+export interface GroupExpense {
+  id: string;
+  groupId: string;
+  creatorId: string; // Who actually paid
+  loggedById?: string; // Who added it to the app (optional)
+  type: 'personal' | 'shared';
+  title: string;
+  amount: number;
+  currency: string;
+  category: string;
+  date: Timestamp;
+  description?: string;
+  receiptPhoto?: string;
+  splitType: string;
+  splitDetails: Array<{
+    userId: string;
+    share: number;
+    percent: number;
+    exactAmount: number;
+    paid: boolean;
+  }>;
+  settled: boolean;
+  createdAt: Timestamp;
+}
+
+export interface GroupInvite {
+  id: string;
+  groupId: string;
+  code: string;
+  type: 'qr' | 'link';
+  maxUses: number;
+  uses: number;
+  expiresAt: Timestamp;
+  createdBy: string;
+  createdAt: Timestamp;
 }
 
 export interface GroupTimelineEvent {
@@ -98,31 +112,57 @@ export interface GroupTimelineEvent {
     lat: number;
     lng: number;
   };
-  photos: string[];
-  linkedExpenseId?: string;
-}
-
-export interface GroupInvite {
-  id: string;
-  groupId: string;
-  code: string;
-  type: 'qr' | 'link';
-  maxUses: number;
-  uses: number;
-  expiresAt: Timestamp;
-  createdBy: string;
-  createdAt: Timestamp;
+  photos?: string[];
 }
 
 export interface ExpenseLog {
   id: string;
   groupId: string;
-  expenseId?: string;
-  type: 'expense_added' | 'expense_updated' | 'expense_deleted' | 'expense_settled' | 'payment_made';
+  expenseId: string;
+  type: 'expense_added' | 'expense_updated' | 'expense_deleted' | 'payment_made' | 'payment_received';
+  description: string;
   performedBy: string;
   performedByName: string;
-  description: string;
-  amount?: number;
-  currency?: string;
   createdAt: Timestamp;
 }
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: 'expense_added' | 'payment_request' | 'payment_received' | 'group_invite';
+  title: string;
+  message: string;
+  groupId?: string;
+  expenseId?: string;
+  read: boolean;
+  createdAt: Timestamp;
+}
+
+export interface NoteContentBlock {
+  id: string;
+  type: 'text' | 'checklist';
+  content: string;
+  completed?: boolean;
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface Note {
+  id: string;
+  groupId: string;
+  creatorId: string;
+  lastEditorId: string;
+  lastEditorName: string;
+  title: string;
+  content: string; 
+  checklist: ChecklistItem[];
+  type: 'personal' | 'shared';
+  syncedVersion: number;
+  lastEdited: Timestamp;
+}
+
+export type Group = TravelGroup;

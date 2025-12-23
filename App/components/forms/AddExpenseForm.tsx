@@ -15,6 +15,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useThemeStore } from '../../stores/themeStore';
 import { useExpenseStore } from '../../stores/expenseStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -29,36 +30,79 @@ import {
   calculatePercentSplit,
   calculateExactSplit,
 } from '../../utils/splitCalculator';
-import { MotiView } from 'moti';
-import * as Haptics from 'expo-haptics';
+import { format } from 'date-fns';
+import { MemberAvatar } from '../ui/MemberAvatar';
 
 interface AddExpenseFormProps {
   visible: boolean;
   groupId: string;
   groupCurrency: string;
+  preselectedType: 'personal' | 'shared';
+  editingExpense?: any;
   onClose: () => void;
 }
 
-export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: AddExpenseFormProps) {
+export function AddExpenseForm({
+  visible,
+  groupId,
+  groupCurrency,
+  preselectedType,
+  editingExpense,
+  onClose,
+}: AddExpenseFormProps) {
   const { theme } = useThemeStore();
   const { user } = useAuthStore();
   const { showToast } = useToast();
-  const { createExpense, loading } = useExpenseStore();
+  const { createExpense, updateExpense, loading } = useExpenseStore();
   const { members } = useGroupMembers(groupId);
   const { pickImage, uploading } = useImagePicker();
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('food');
-  const [type, setType] = useState<'personal' | 'shared'>('shared');
   const [description, setDescription] = useState('');
   const [receiptPhoto, setReceiptPhoto] = useState<string | null>(null);
   const [splitType, setSplitType] = useState<'equal' | 'shares' | 'percent' | 'exact'>('equal');
   const [splitDetails, setSplitDetails] = useState<{ userId: string; value: number }[]>([]);
+  const [expenseDate, setExpenseDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedCreator, setSelectedCreator] = useState<string>('');
 
-  // Initialize split details when members change
+  // Populate form when editing
   useEffect(() => {
-    if (members.length > 0 && splitDetails.length === 0) {
+    if (editingExpense) {
+      setTitle(editingExpense.title);
+      setAmount(editingExpense.amount.toString());
+      setCategory(editingExpense.category);
+      setDescription(editingExpense.description || '');
+      setReceiptPhoto(editingExpense.receiptPhoto || null);
+      setSplitType(editingExpense.splitType);
+      setExpenseDate(editingExpense.date.toDate());
+      setSelectedCreator(editingExpense.creatorId);
+
+      if (editingExpense.type === 'shared') {
+        const initialSplits = editingExpense.splitDetails.map((split: any) => ({
+          userId: split.userId,
+          value: split.exactAmount,
+        }));
+        setSplitDetails(initialSplits);
+      }
+    } else {
+      // Reset for new expense
+      setTitle('');
+      setAmount('');
+      setCategory('food');
+      setDescription('');
+      setReceiptPhoto(null);
+      setSplitType('equal');
+      setSplitDetails([]);
+      setExpenseDate(new Date());
+      setSelectedCreator(user?.uid || '');
+    }
+  }, [editingExpense, visible, user?.uid]);
+
+  useEffect(() => {
+    if (members.length > 0 && splitDetails.length === 0 && !editingExpense) {
       setSplitDetails(
         members.map((member) => ({
           userId: member.userId,
@@ -68,17 +112,16 @@ export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: Add
     }
   }, [members]);
 
-  // Reset split details when split type changes
   useEffect(() => {
-    if (members.length > 0) {
+    if (members.length > 0 && !editingExpense) {
       const defaultValue =
         splitType === 'equal'
           ? 1
           : splitType === 'percent'
-          ? 100 / members.length
-          : splitType === 'shares'
-          ? 1
-          : parseFloat(amount) / members.length || 0;
+            ? 100 / members.length
+            : splitType === 'shares'
+              ? 1
+              : parseFloat(amount) / members.length || 0;
 
       setSplitDetails(
         members.map((member) => ({
@@ -103,20 +146,20 @@ export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: Add
     if (!user) return;
 
     try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      
       const amountNum = parseFloat(amount);
-
       let calculatedSplits;
 
-      if (type === 'personal') {
-        calculatedSplits = [{
-          userId: user.uid,
-          share: 1,
-          percent: 100,
-          exactAmount: amountNum,
-          paidBy: user.uid,
-        }];
+      if (preselectedType === 'personal') {
+        calculatedSplits = [
+          {
+            userId: user.uid,
+            share: 1,
+            percent: 100,
+            exactAmount: amountNum,
+            paidBy: user.uid,
+            paid: false,
+          },
+        ];
       } else {
         const memberIds = members.map((m) => m.userId);
 
@@ -149,22 +192,21 @@ export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: Add
         }
       }
 
-      // Build expense data
       const expenseData: any = {
         groupId,
-        creatorId: user.uid,
-        type,
+        creatorId: editingExpense ? editingExpense.creatorId : selectedCreator || user!.uid,
+        loggedById: selectedCreator !== user?.uid ? user?.uid : undefined,
+        type: preselectedType,
         title: title.trim(),
         amount: amountNum,
         currency: groupCurrency,
         category,
-        date: Timestamp.now(),
-        splitType: type === 'personal' ? 'equal' : splitType,
+        date: Timestamp.fromDate(expenseDate),
+        splitType: preselectedType === 'personal' ? 'equal' : splitType,
         splitDetails: calculatedSplits,
         settled: false,
       };
 
-      // Only add optional fields if they have truthy values
       if (description && description.trim()) {
         expenseData.description = description.trim();
       }
@@ -173,20 +215,22 @@ export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: Add
         expenseData.receiptPhoto = receiptPhoto;
       }
 
-      await createExpense(expenseData);
+      if (editingExpense) {
+        await updateExpense(editingExpense.id, groupId, expenseData, user.uid);
+        showToast('Expense updated successfully!', 'success');
+      } else {
+        await createExpense(expenseData);
+        showToast('Expense added successfully!', 'success');
+      }
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast('Expense added successfully!', 'success');
       handleClose();
     } catch (error: any) {
       console.error('Submit error:', error);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast(error.message || 'Failed to add expense', 'error');
+      showToast(error.message || 'Failed to save expense', 'error');
     }
   };
 
   const handleAddPhoto = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const uri = await pickImage();
     if (uri) {
       setReceiptPhoto(uri);
@@ -194,15 +238,22 @@ export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: Add
     }
   };
 
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setExpenseDate(selectedDate);
+    }
+  };
+
   const handleClose = () => {
     setTitle('');
     setAmount('');
     setCategory('food');
-    setType('shared');
     setDescription('');
     setReceiptPhoto(null);
     setSplitType('equal');
     setSplitDetails([]);
+    setExpenseDate(new Date());
     onClose();
   };
 
@@ -212,20 +263,53 @@ export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: Add
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={[styles.container, { backgroundColor: theme.colors.background }]}
       >
-        {/* Header with Gradient */}
         <LinearGradient
-          colors={[theme.colors.gradientStart + '15', theme.colors.background]}
-          style={styles.headerGradient}
+          colors={[theme.colors.gradientStart + '20', theme.colors.background]}
+          style={styles.header}
         >
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
             </TouchableOpacity>
-            
-            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-              Add Expense
-            </Text>
-            
+
+            <View style={styles.headerTitleContainer}>
+              <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+                {editingExpense ? 'Edit Expense' : 'Add Expense'}
+              </Text>
+              <View
+                style={[
+                  styles.typeBadge,
+                  {
+                    backgroundColor:
+                      preselectedType === 'personal'
+                        ? theme.colors.secondary + '20'
+                        : theme.colors.primary + '20',
+                  },
+                ]}
+              >
+                <MaterialIcons
+                  name={preselectedType === 'personal' ? 'person' : 'group'}
+                  size={12}
+                  color={
+                    preselectedType === 'personal' ? theme.colors.secondary : theme.colors.primary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.typeBadgeText,
+                    {
+                      color:
+                        preselectedType === 'personal'
+                          ? theme.colors.secondary
+                          : theme.colors.primary,
+                    },
+                  ]}
+                >
+                  {preselectedType === 'personal' ? 'Personal' : 'Shared'}
+                </Text>
+              </View>
+            </View>
+
             <View style={{ width: 40 }} />
           </View>
         </LinearGradient>
@@ -235,317 +319,268 @@ export function AddExpenseForm({ visible, groupId, groupCurrency, onClose }: Add
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Expense Type Toggle */}
-          <MotiView
-            from={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', duration: 400 }}
-          >
-            <View style={styles.section}>
-              <View style={styles.typeToggle}>
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    type === 'shared' && styles.typeButtonActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setType('shared');
-                  }}
-                  activeOpacity={0.7}
-                >
-                  {type === 'shared' ? (
-                    <LinearGradient
-                      colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-                      style={styles.typeButtonGradient}
-                    >
-                      <MaterialIcons name="group" size={20} color="#FFFFFF" />
-                      <Text style={styles.typeTextActive}>Shared</Text>
-                    </LinearGradient>
-                  ) : (
-                    <View style={[styles.typeButtonInactive, { backgroundColor: theme.colors.cardBackground }]}>
-                      <MaterialIcons name="group" size={20} color={theme.colors.textMuted} />
-                      <Text style={[styles.typeTextInactive, { color: theme.colors.textSecondary }]}>
-                        Shared
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    type === 'personal' && styles.typeButtonActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setType('personal');
-                  }}
-                  activeOpacity={0.7}
-                >
-                  {type === 'personal' ? (
-                    <LinearGradient
-                      colors={[theme.colors.secondary, theme.colors.accent]}
-                      style={styles.typeButtonGradient}
-                    >
-                      <MaterialIcons name="person" size={20} color="#FFFFFF" />
-                      <Text style={styles.typeTextActive}>Personal</Text>
-                    </LinearGradient>
-                  ) : (
-                    <View style={[styles.typeButtonInactive, { backgroundColor: theme.colors.cardBackground }]}>
-                      <MaterialIcons name="person" size={20} color={theme.colors.textMuted} />
-                      <Text style={[styles.typeTextInactive, { color: theme.colors.textSecondary }]}>
-                        Personal
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </MotiView>
-
           {/* Title */}
-          <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 100 }}
-          >
-            <View style={styles.section}>
-              <View style={styles.labelRow}>
-                <MaterialIcons name="title" size={18} color={theme.colors.primary} />
-                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                  Title *
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.inputContainer,
-                  {
-                    backgroundColor: theme.colors.inputBackground,
-                    borderColor: theme.colors.inputBorder,
-                  },
-                ]}
-              >
-                <TextInput
-                  style={[styles.input, { color: theme.colors.inputText }]}
-                  placeholder="e.g., Dinner at XYZ"
-                  placeholderTextColor={theme.colors.inputPlaceholder}
-                  value={title}
-                  onChangeText={setTitle}
-                />
-              </View>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.textPrimary }]}>
+              Title *
+            </Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+            >
+              <MaterialIcons name="edit" size={18} color={theme.colors.textMuted} />
+              <TextInput
+                style={[styles.input, { color: theme.colors.inputText }]}
+                placeholder="e.g., Lunch at restaurant"
+                placeholderTextColor={theme.colors.inputPlaceholder}
+                value={title}
+                onChangeText={setTitle}
+              />
             </View>
-          </MotiView>
+          </View>
 
           {/* Amount */}
-          <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 200 }}
-          >
-            <View style={styles.section}>
-              <View style={styles.labelRow}>
-                <MaterialIcons name="currency-rupee" size={18} color={theme.colors.success} />
-                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                  Amount ({groupCurrency}) *
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.textPrimary }]}>
+              Amount *
+            </Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+            >
+              <View style={[styles.currencyBadge, { backgroundColor: theme.colors.primary + '15' }]}>
+                <Text style={[styles.currencyText, { color: theme.colors.primary }]}>
+                  {groupCurrency}
                 </Text>
               </View>
-              <View
-                style={[
-                  styles.inputContainer,
-                  {
-                    backgroundColor: theme.colors.inputBackground,
-                    borderColor: theme.colors.inputBorder,
-                  },
-                ]}
-              >
-                <MaterialIcons name="currency-rupee" size={20} color={theme.colors.textMuted} />
-                <TextInput
-                  style={[styles.input, { color: theme.colors.inputText }]}
-                  placeholder="0.00"
-                  placeholderTextColor={theme.colors.inputPlaceholder}
-                  value={amount}
-                  onChangeText={setAmount}
-                  keyboardType="decimal-pad"
-                />
-              </View>
+              <TextInput
+                style={[styles.input, styles.amountInput, { color: theme.colors.inputText }]}
+                placeholder="0.00"
+                placeholderTextColor={theme.colors.inputPlaceholder}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="decimal-pad"
+              />
             </View>
-          </MotiView>
+          </View>
+
+          {/* Date */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.textPrimary }]}>
+              Date *
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <MaterialIcons name="calendar-today" size={18} color={theme.colors.textMuted} />
+              <Text style={[styles.dateText, { color: theme.colors.inputText }]}>
+                {format(expenseDate, 'MMM dd, yyyy')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={expenseDate}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+              maximumDate={new Date()}
+            />
+          )}
+
+          {preselectedType === 'shared' && members.length > 0 && (
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.colors.textPrimary }]}>
+                Paid by *
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.creatorSelector}>
+                {members.map((member) => (
+                  <TouchableOpacity
+                    key={member.userId}
+                    style={[
+                      styles.creatorOption,
+                      selectedCreator === member.userId && {
+                        backgroundColor: theme.colors.primary + '15',
+                        borderColor: theme.colors.primary,
+                      },
+                    ]}
+                    onPress={() => setSelectedCreator(member.userId)}
+                    activeOpacity={0.7}
+                  >
+                    <MemberAvatar
+                      name={member.userName}
+                      photo={member.userProfilePicture}
+                      size='small'
+                    />
+                    <Text style={[styles.creatorName, { color: theme.colors.textPrimary }]}>
+                      {member.userName}
+                    </Text>
+                    {selectedCreator === member.userId && (
+                      <MaterialIcons name="check" size={20} color={theme.colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
 
           {/* Category */}
-          <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 300 }}
-          >
-            <View style={styles.section}>
-              <View style={styles.labelRow}>
-                <MaterialIcons name="category" size={18} color={theme.colors.primary} />
-                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                  Category
-                </Text>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoryRow}
-              >
-                {EXPENSE_CATEGORIES.map((cat) => (
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.textPrimary }]}>
+              Category
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScroll}
+            >
+              {EXPENSE_CATEGORIES.map((cat) => {
+                const isSelected = category === cat.id;
+                return (
                   <TouchableOpacity
                     key={cat.id}
                     style={[
-                      styles.categoryButton,
+                      styles.categoryChip,
                       {
-                        backgroundColor:
-                          category === cat.id
-                            ? theme.colors.primary + '20'
-                            : theme.colors.cardBackground,
-                        borderColor:
-                          category === cat.id
-                            ? theme.colors.primary
-                            : theme.colors.cardBorder,
+                        backgroundColor: isSelected
+                          ? theme.colors.primary + '15'
+                          : theme.colors.cardBackground,
+                        borderColor: isSelected ? theme.colors.primary : theme.colors.cardBorder,
                       },
                     ]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setCategory(cat.id);
-                    }}
+                    onPress={() => setCategory(cat.id)}
                     activeOpacity={0.7}
                   >
                     <MaterialIcons
                       name={cat.icon as any}
-                      size={20}
-                      color={category === cat.id ? theme.colors.primary : theme.colors.textMuted}
+                      size={16}
+                      color={isSelected ? theme.colors.primary : theme.colors.textMuted}
                     />
                     <Text
                       style={[
-                        styles.categoryText,
+                        styles.categoryChipText,
                         {
-                          color:
-                            category === cat.id
-                              ? theme.colors.primary
-                              : theme.colors.textPrimary,
+                          color: isSelected ? theme.colors.primary : theme.colors.textSecondary,
                         },
                       ]}
                     >
                       {cat.label}
                     </Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </MotiView>
+                );
+              })}
+            </ScrollView>
+          </View>
 
-          {/* Split Selector (Only for Shared Expenses) */}
-          {type === 'shared' && members.length > 0 && (
-            <MotiView
-              from={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', duration: 400, delay: 100 }}
-            >
-              <ExpenseSplitSelector
-                members={members}
-                totalAmount={parseFloat(amount) || 0}
-                splitType={splitType}
-                onSplitTypeChange={setSplitType}
-                splitDetails={splitDetails}
-                onSplitDetailsChange={setSplitDetails}
-              />
-            </MotiView>
+          {/* Split Selector (Shared only) */}
+          {preselectedType === 'shared' && members.length > 0 && (
+            <ExpenseSplitSelector
+              members={members}
+              totalAmount={parseFloat(amount) || 0}
+              splitType={splitType}
+              onSplitTypeChange={setSplitType}
+              splitDetails={splitDetails}
+              onSplitDetailsChange={setSplitDetails}
+            />
           )}
 
           {/* Description */}
-          <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 400 }}
-          >
-            <View style={styles.section}>
-              <View style={styles.labelRow}>
-                <MaterialIcons name="description" size={18} color={theme.colors.primary} />
-                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                  Description (Optional)
-                </Text>
-              </View>
-              <TextInput
-                style={[
-                  styles.textArea,
-                  {
-                    backgroundColor: theme.colors.inputBackground,
-                    color: theme.colors.inputText,
-                    borderColor: theme.colors.inputBorder,
-                  },
-                ]}
-                placeholder="Add notes..."
-                placeholderTextColor={theme.colors.inputPlaceholder}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-          </MotiView>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.textPrimary }]}>
+              Notes (Optional)
+            </Text>
+            <TextInput
+              style={[
+                styles.textArea,
+                {
+                  backgroundColor: theme.colors.inputBackground,
+                  color: theme.colors.inputText,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
+              placeholder="Add details..."
+              placeholderTextColor={theme.colors.inputPlaceholder}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={3}
+            />
+          </View>
 
-          {/* Receipt Photo */}
-          <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 500 }}
-          >
-            <View style={styles.section}>
-              <View style={styles.labelRow}>
-                <MaterialIcons name="receipt" size={18} color={theme.colors.primary} />
-                <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                  Receipt (Optional)
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.photoButton,
-                  {
-                    backgroundColor: theme.colors.cardBackground,
-                    borderColor: theme.colors.cardBorder,
-                  },
-                ]}
-                onPress={handleAddPhoto}
-                disabled={uploading}
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={[theme.colors.primary + '20', theme.colors.secondary + '20']}
-                  style={styles.photoIconContainer}
-                >
-                  <MaterialIcons
-                    name="add-photo-alternate"
-                    size={32}
-                    color={theme.colors.primary}
-                  />
-                </LinearGradient>
-                <Text style={[styles.photoText, { color: theme.colors.textSecondary }]}>
-                  {uploading ? 'Uploading...' : receiptPhoto ? 'Change Photo' : 'Add Receipt Photo'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </MotiView>
+          {/* Receipt */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.textPrimary }]}>
+              Receipt (Optional)
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.photoButton,
+                {
+                  backgroundColor: theme.colors.cardBackground,
+                  borderColor: theme.colors.cardBorder,
+                },
+              ]}
+              onPress={handleAddPhoto}
+              disabled={uploading}
+              activeOpacity={0.7}
+            >
+              {receiptPhoto ? (
+                <>
+                  <MaterialIcons name="check-circle" size={20} color={theme.colors.success} />
+                  <Text style={[styles.photoButtonText, { color: theme.colors.success }]}>
+                    Receipt Added
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <MaterialIcons name="camera-alt" size={20} color={theme.colors.textMuted} />
+                  <Text style={[styles.photoButtonText, { color: theme.colors.textSecondary }]}>
+                    {uploading ? 'Uploading...' : 'Add Receipt'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </ScrollView>
 
-        {/* Submit Button with Gradient */}
-        <View style={[styles.footer, { backgroundColor: theme.colors.background }]}>
+        {/* Submit Button */}
+        <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={loading || uploading}
-            activeOpacity={0.8}
+            activeOpacity={0.9}
           >
             <LinearGradient
               colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-              style={[styles.submitButton, (loading || uploading) && { opacity: 0.7 }]}
+              style={[styles.submitButton, (loading || uploading) && { opacity: 0.6 }]}
             >
               {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <>
-                  <Text style={styles.submitText}>Add Expense</Text>
-                  <MaterialIcons name="add" size={20} color="#FFFFFF" />
+                  <Text style={styles.submitText}>
+                    {editingExpense ? 'Update Expense' : 'Add Expense'}
+                  </Text>
+                  <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
                 </>
               )}
             </LinearGradient>
@@ -560,172 +595,168 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerGradient: {
-    paddingTop: 60,
-    paddingBottom: 12,
-  },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingTop: 60,
+    paddingBottom: 16,
   },
-  headerButton: {
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  closeButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerTitleContainer: {
+    alignItems: 'center',
+    gap: 6,
+  },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  typeBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
   },
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 140,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
   },
-  section: {
-    marginBottom: 24,
+  inputGroup: {
+    marginBottom: 18,
   },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 16,
+  inputLabel: {
+    fontSize: 13,
     fontWeight: '700',
+    marginBottom: 8,
   },
-  inputContainer: {
+  inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 56,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    gap: 12,
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    gap: 10,
     borderWidth: 1,
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
   },
+  amountInput: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  currencyBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  currencyText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dateText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  categoryScroll: {
+    gap: 8,
+    paddingVertical: 4,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   textArea: {
-    height: 100,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    fontSize: 16,
+    height: 80,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    fontSize: 13,
     borderWidth: 1,
     textAlignVertical: 'top',
   },
-  typeToggle: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  typeButton: {
-    flex: 1,
-    overflow: 'hidden',
-    borderRadius: 16,
-  },
-  typeButtonActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  typeButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  typeButtonInactive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 16,
-  },
-  typeTextActive: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  typeTextInactive: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  categoryRow: {
-    gap: 10,
-    paddingRight: 24,
-  },
-  categoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 2,
-  },
-  categoryText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
   photoButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 24,
-    borderRadius: 16,
-    borderWidth: 2,
-    gap: 16,
-  },
-  photoIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
     justifyContent: 'center',
-    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
   },
-  photoText: {
-    fontSize: 15,
+  photoButtonText: {
+    fontSize: 13,
     fontWeight: '600',
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
-    paddingBottom: 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
   },
   submitButton: {
     flexDirection: 'row',
-    height: 56,
-    borderRadius: 16,
+    height: 50,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
   },
   submitText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
+  },
+  creatorSelector: {
+    maxHeight: 60,
+  },
+  creatorOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginRight: 8,
+    minWidth: 100,
+  },
+  creatorName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

@@ -1,284 +1,563 @@
 // components/ui/ExpenseItem.tsx
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    StyleSheet,
+    Modal,
+    ScrollView,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { GroupExpense } from '../../lib/schema';
 import { useThemeStore } from '../../stores/themeStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useExpenseStore } from '../../stores/expenseStore';
+import { GroupExpense } from '../../lib/schema';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { MotiView } from 'moti';
-import * as Haptics from 'expo-haptics';
+import { getExpenseBalanceText } from '../../utils/balanceCalculator';
+import { getCategoryByIdOrDefault } from '../../utils/expenseCategories';
+import { format } from 'date-fns';
+import { useToast } from '../../utils/toastManager';
 
 interface ExpenseItemProps {
     expense: GroupExpense;
-    onPress?: () => void;
+    currentUserId: string;
+    groupCurrency: string;
+    onEdit?: (expense: GroupExpense) => void;
 }
 
-export function ExpenseItem({ expense, onPress }: ExpenseItemProps) {
+export function ExpenseItem({ expense, currentUserId, groupCurrency, onEdit }: ExpenseItemProps) {
     const { theme } = useThemeStore();
-    const { user } = useAuthStore();
+    const { markAsPaid, markAsReceived, deleteExpense } = useExpenseStore();
+    const { showToast } = useToast();
+    const [showDetails, setShowDetails] = useState(false);
 
-    const date = expense.date.toDate();
-    const dateStr = date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-    });
+    const category = getCategoryByIdOrDefault(expense.category);
+    const balanceInfo = getExpenseBalanceText(expense, currentUserId);
+    const isPayer = expense.creatorId === currentUserId;
 
-    const getCategoryIcon = (category: string): keyof typeof MaterialIcons.glyphMap => {
-        const icons: Record<string, keyof typeof MaterialIcons.glyphMap> = {
-            food: 'restaurant',
-            transport: 'directions-car',
-            accommodation: 'hotel',
-            entertainment: 'movie',
-            shopping: 'shopping-cart',
-            groceries: 'local-grocery-store',
-            utilities: 'lightbulb',
-            health: 'local-hospital',
-            other: 'receipt',
-        };
-        return icons[category.toLowerCase()] || 'receipt';
+    const currentUserSplit = expense.splitDetails.find((s) => s.userId === currentUserId);
+    const hasUserPaid = currentUserSplit?.paid || false;
+
+    const handleMarkAsPaid = async () => {
+        try {
+            await markAsPaid(expense.id, expense.groupId, currentUserId);
+            showToast('Payment recorded!', 'success');
+            setShowDetails(false);
+        } catch (error: any) {
+            showToast(error.message || 'Failed to mark as paid', 'error');
+        }
     };
 
-    const getCategoryColor = (category: string): string => {
-        const colors: Record<string, string> = {
-            food: '#FF6B6B',
-            transport: '#4ECDC4',
-            accommodation: '#95E1D3',
-            entertainment: '#9C27B0',
-            shopping: '#FFE66D',
-            groceries: '#34A853',
-            utilities: '#FF9800',
-            health: '#E91E63',
-            other: theme.colors.textMuted,
-        };
-        return colors[category.toLowerCase()] || theme.colors.textMuted;
+    const handleMarkAsReceived = async () => {
+        try {
+            await markAsReceived(expense.id, expense.groupId, currentUserId);
+            showToast('Marked as received!', 'success');
+            setShowDetails(false);
+        } catch (error: any) {
+            showToast(error.message || 'Failed to mark as received', 'error');
+        }
     };
 
-    // Calculate user's share
-    const myShare = expense.splitDetails.find(
-        (split) => split.userId === user?.uid
-    );
-    const myAmount = myShare?.exactAmount || 0;
-    const iPaid = expense.creatorId === user?.uid;
-
-    const handlePress = async () => {
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onPress?.();
+    const handleEdit = () => {
+        setShowDetails(false);
+        if (onEdit) {
+            onEdit(expense);
+        }
     };
 
-    const categoryColor = getCategoryColor(expense.category);
+    const handleDelete = () => {
+  showToast(
+    'Delete this expense? This action cannot be undone.',
+    'warning',
+    {
+      confirmAction: async () => {
+        await deleteExpense(expense.id, expense.groupId, currentUserId);
+        showToast('Expense deleted', 'success');
+        setShowDetails(false);
+      },
+      confirmText: 'Delete'
+    }
+  );
+};
 
     return (
-        <TouchableOpacity
-            style={[
-                styles.container,
-                {
-                    backgroundColor: theme.colors.cardBackground,
-                    borderColor: theme.colors.cardBorder,
-                },
-            ]}
-            onPress={handlePress}
-            activeOpacity={0.7}
-        >
-            <View style={styles.left}>
-                {/* Category Icon with Gradient */}
-                <LinearGradient
-                    colors={[categoryColor + '30', categoryColor + '15']}
-                    style={styles.iconContainer}
-                >
-                    <MaterialIcons
-                        name={getCategoryIcon(expense.category)}
-                        size={24}
-                        color={categoryColor}
-                    />
-                </LinearGradient>
-
-                <View style={styles.info}>
-                    <Text style={[styles.title, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                        {expense.title}
-                    </Text>
-
-                    <View style={styles.metaRow}>
-                        <View style={styles.dateContainer}>
-                            <MaterialIcons name="calendar-today" size={12} color={theme.colors.textMuted} />
-                            <Text style={[styles.date, { color: theme.colors.textSecondary }]}>
-                                {dateStr}
-                            </Text>
-                        </View>
-
-                        <View style={[
-                            styles.typeBadge,
-                            { backgroundColor: expense.type === 'shared' ? theme.colors.primary + '15' : theme.colors.secondary + '15' }
-                        ]}>
-                            <MaterialIcons
-                                name={expense.type === 'shared' ? 'group' : 'person'}
-                                size={12}
-                                color={expense.type === 'shared' ? theme.colors.primary : theme.colors.secondary}
-                            />
-                            <Text style={[
-                                styles.typeText,
-                                { color: expense.type === 'shared' ? theme.colors.primary : theme.colors.secondary }
-                            ]}>
-                                {expense.type === 'shared' ? 'Shared' : 'Personal'}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {expense.type === 'shared' && myShare && (
-                        <View style={styles.splitRow}>
-                            <MaterialIcons
-                                name={iPaid ? 'trending-up' : 'trending-down'}
-                                size={14}
-                                color={iPaid ? theme.colors.success : theme.colors.error}
-                            />
-                            <Text
-                                style={[
-                                    styles.splitInfo,
-                                    { color: iPaid ? theme.colors.success : theme.colors.error },
-                                ]}
-                            >
-                                {iPaid
-                                    ? `You paid ${formatCurrency(expense.amount, expense.currency)}`
-                                    : `You owe ${formatCurrency(myAmount, expense.currency)}`}
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            </View>
-
-            <View style={styles.right}>
-                <Text
+        <>
+            <TouchableOpacity
+                style={[
+                    styles.container,
+                    {
+                        backgroundColor: theme.colors.cardBackground,
+                        borderColor: theme.colors.cardBorder,
+                    },
+                ]}
+                onPress={() => setShowDetails(true)}
+                activeOpacity={0.7}
+            >
+                <View
                     style={[
-                        styles.amount,
-                        { color: expense.type === 'shared' ? theme.colors.primary : theme.colors.textPrimary },
+                        styles.iconContainer,
+                        {
+                            backgroundColor:
+                                expense.type === 'personal'
+                                    ? theme.colors.secondary + '20'
+                                    : theme.colors.primary + '20',
+                        },
                     ]}
                 >
-                    {formatCurrency(expense.amount, expense.currency)}
-                </Text>
+                    <MaterialIcons
+                        name={category.icon as any}
+                        size={22}
+                        color={expense.type === 'personal' ? theme.colors.secondary : theme.colors.primary}
+                    />
+                </View>
 
-                {expense.settled && (
-                    <View style={[styles.settledBadge, { backgroundColor: theme.colors.successLight }]}>
-                        <MaterialIcons name="check-circle" size={12} color={theme.colors.success} />
-                        <Text style={[styles.settledText, { color: theme.colors.success }]}>
-                            Settled
+                <View style={styles.content}>
+                    <View style={styles.titleRow}>
+                        <Text style={[styles.title, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                            {expense.title}
                         </Text>
+                        {expense.settled && (
+                            <View style={[styles.settledMicroBadge, { backgroundColor: theme.colors.success + '20' }]}>
+                                <MaterialIcons name="check" size={12} color={theme.colors.success} />
+                            </View>
+                        )}
+                        {expense.type === 'shared' && hasUserPaid && !expense.settled && (
+                            <View style={[styles.paidMicroBadge, { backgroundColor: theme.colors.success + '20' }]}>
+                                <MaterialIcons name="check" size={12} color={theme.colors.success} />
+                            </View>
+                        )}
                     </View>
-                )}
+                    <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+                        {category.label} • {format(expense.date.toDate(), 'MMM dd, yyyy')}
+                    </Text>
+                    {expense.type === 'shared' && (
+                        <Text style={[styles.balance, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                            {balanceInfo.text}
+                        </Text>
+                    )}
+                </View>
 
-                <View style={styles.indicators}>
-                    {expense.receiptPhoto && (
-                        <View style={[styles.indicator, { backgroundColor: theme.colors.primary + '15' }]}>
-                            <MaterialIcons name="receipt" size={14} color={theme.colors.primary} />
+                <View style={styles.amountContainer}>
+                    <Text style={[styles.amount, { color: theme.colors.textPrimary }]}>
+                        {formatCurrency(expense.amount, groupCurrency)}
+                    </Text>
+                    {expense.type === 'shared' && (
+                        <View style={styles.balanceBadge}>
+                            <Text
+                                style={[
+                                    styles.balanceAmount,
+                                    {
+                                        color: balanceInfo.isPositive ? theme.colors.success : theme.colors.error,
+                                    },
+                                ]}
+                            >
+                                {balanceInfo.isPositive ? '+' : '-'}
+                                {formatCurrency(balanceInfo.amount, groupCurrency)}
+                            </Text>
                         </View>
                     )}
                 </View>
-            </View>
-        </TouchableOpacity>
+            </TouchableOpacity>
+
+            <Modal
+                visible={showDetails}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setShowDetails(false)}
+            >
+                <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
+                    <LinearGradient
+                        colors={[theme.colors.gradientStart + '15', theme.colors.background]}
+                        style={styles.modalHeader}
+                    >
+                        <View style={styles.modalHeaderContent}>
+                            <TouchableOpacity
+                                onPress={() => setShowDetails(false)}
+                                style={styles.closeButton}
+                            >
+                                <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
+                            </TouchableOpacity>
+                            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+                                Expense Details
+                            </Text>
+                            <View style={styles.headerActions}>
+                                <TouchableOpacity onPress={handleEdit} style={styles.headerActionButton}>
+                                    <MaterialIcons name="edit" size={20} color={theme.colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={handleDelete} style={styles.headerActionButton}>
+                                    <MaterialIcons name="delete" size={20} color={theme.colors.error} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </LinearGradient>
+
+                    <ScrollView contentContainerStyle={styles.modalContent}>
+                        {expense.settled && (
+                            <View
+                                style={[
+                                    styles.statusBanner,
+                                    {
+                                        backgroundColor: theme.colors.success + '15',
+                                        borderColor: theme.colors.success,
+                                    },
+                                ]}
+                            >
+                                <MaterialIcons name="check-circle" size={20} color={theme.colors.success} />
+                                <Text style={[styles.statusBannerText, { color: theme.colors.success }]}>
+                                    Fully Settled
+                                </Text>
+                            </View>
+                        )}
+
+                        <View
+                            style={[
+                                styles.detailCard,
+                                {
+                                    backgroundColor: theme.colors.cardBackground,
+                                    borderColor: theme.colors.cardBorder,
+                                },
+                            ]}
+                        >
+                            <View style={styles.detailRow}>
+                                <MaterialIcons name={category.icon as any} size={28} color={theme.colors.primary} />
+                                <View style={styles.detailInfo}>
+                                    <Text style={[styles.detailTitle, { color: theme.colors.textPrimary }]}>
+                                        {expense.title}
+                                    </Text>
+                                    <Text style={[styles.detailSubtitle, { color: theme.colors.textSecondary }]}>
+                                        {category.label}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.detailDivider} />
+
+                            <View style={styles.detailItem}>
+                                <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
+                                    Amount
+                                </Text>
+                                <Text style={[styles.detailValue, { color: theme.colors.textPrimary }]}>
+                                    {formatCurrency(expense.amount, groupCurrency)}
+                                </Text>
+                            </View>
+
+                            <View style={styles.detailItem}>
+                                <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
+                                    Date
+                                </Text>
+                                <Text style={[styles.detailValue, { color: theme.colors.textPrimary }]}>
+                                    {format(expense.date.toDate(), 'MMM dd, yyyy')}
+                                </Text>
+                            </View>
+
+                            <View style={styles.detailItem}>
+                                <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
+                                    Type
+                                </Text>
+                                <Text style={[styles.detailValue, { color: theme.colors.textPrimary }]}>
+                                    {expense.type === 'personal' ? 'Personal' : 'Shared'}
+                                </Text>
+                            </View>
+
+                            {expense.description && (
+                                <View style={styles.detailItem}>
+                                    <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
+                                        Description
+                                    </Text>
+                                    <Text style={[styles.detailValue, { color: theme.colors.textPrimary }]}>
+                                        {expense.description}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        {expense.type === 'shared' && (
+                            <View
+                                style={[
+                                    styles.detailCard,
+                                    {
+                                        backgroundColor: theme.colors.cardBackground,
+                                        borderColor: theme.colors.cardBorder,
+                                    },
+                                ]}
+                            >
+                                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                                    Split Details
+                                </Text>
+                                {expense.splitDetails.map((split) => (
+                                    <View key={split.userId} style={styles.splitRow}>
+                                        <View style={styles.splitLeft}>
+                                            <Text style={[styles.splitUser, { color: theme.colors.textPrimary }]}>
+                                                {split.userId === currentUserId ? 'You' : 'Member'}
+                                            </Text>
+                                            {split.paid && (
+                                                <View style={[styles.paidBadge, { backgroundColor: theme.colors.success + '20' }]}>
+                                                    <MaterialIcons name="check" size={10} color={theme.colors.success} />
+                                                    <Text style={[styles.paidBadgeText, { color: theme.colors.success }]}>
+                                                        Paid
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                        <Text style={[styles.splitAmount, { color: theme.colors.textSecondary }]}>
+                                            {formatCurrency(split.exactAmount, groupCurrency)}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+
+                        {expense.type === 'shared' && !expense.settled && (
+                            <View style={styles.actionsContainer}>
+                                {!isPayer && !hasUserPaid && (
+                                    <TouchableOpacity onPress={handleMarkAsPaid} activeOpacity={0.8}>
+                                        <LinearGradient
+                                            colors={[theme.colors.success, theme.colors.success + 'DD']}
+                                            style={styles.actionButton}
+                                        >
+                                            <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Mark as Paid</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+                                )}
+
+                                {isPayer && (
+                                    <TouchableOpacity onPress={handleMarkAsReceived} activeOpacity={0.8}>
+                                        <LinearGradient
+                                            colors={[theme.colors.primary, theme.colors.secondary]}
+                                            style={styles.actionButton}
+                                        >
+                                            <MaterialIcons name="monetization-on" size={20} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Mark as Received</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+                    </ScrollView>
+                </View>
+            </Modal>
+        </>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        borderRadius: 16,
-        marginBottom: 12,
+        padding: 14,
+        borderRadius: 14,
         borderWidth: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    left: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        marginRight: 12,
     },
     iconContainer: {
         width: 48,
         height: 48,
-        borderRadius: 14,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
     },
-    info: {
+    content: {
         flex: 1,
+        marginRight: 12,
+    },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 3,
     },
     title: {
-        fontSize: 16,
-        fontWeight: '700',
-        marginBottom: 6,
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '600',
+        marginRight: 6,
     },
-    metaRow: {
-        flexDirection: 'row',
+    settledMicroBadge: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 8,
-        marginBottom: 6,
     },
-    dateContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    date: {
+    subtitle: {
         fontSize: 12,
-        fontWeight: '500',
+        marginBottom: 3,
     },
-    typeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    typeText: {
+    balance: {
         fontSize: 11,
-        fontWeight: '600',
     },
-    splitRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    splitInfo: {
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    right: {
+    amountContainer: {
         alignItems: 'flex-end',
-        gap: 6,
     },
     amount: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    balanceBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    balanceAmount: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    modalContainer: {
+        flex: 1,
+    },
+    modalHeader: {
+        paddingTop: 60,
+        paddingBottom: 16,
+    },
+    modalHeaderContent: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    closeButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalTitle: {
         fontSize: 18,
         fontWeight: '700',
     },
-    settledBadge: {
+    headerActions: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    headerActionButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 40,
+    },
+    statusBanner: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        marginBottom: 16,
     },
-    settledText: {
-        fontSize: 11,
+    statusBannerText: {
+        fontSize: 14,
         fontWeight: '700',
     },
-    indicators: {
-        flexDirection: 'row',
-        gap: 6,
+    detailCard: {
+        padding: 18,
+        borderRadius: 16,
+        borderWidth: 1,
+        marginBottom: 16,
     },
-    indicator: {
-        width: 28,
-        height: 28,
+    detailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    detailInfo: {
+        flex: 1,
+        marginLeft: 14,
+    },
+    detailTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        marginBottom: 3,
+    },
+    detailSubtitle: {
+        fontSize: 13,
+    },
+    detailDivider: {
+        height: 1,
+        backgroundColor: 'rgba(0,0,0,0.1)',
+        marginVertical: 12,
+    },
+    detailItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingVertical: 8,
+    },
+    detailLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    detailValue: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 12,
+    },
+    splitRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+    },
+    splitLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    splitUser: {
+        fontSize: 14,
+    },
+    paidBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
         borderRadius: 8,
+    },
+    paidBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    splitAmount: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    actionsContainer: {
+        gap: 12,
+    },
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        paddingVertical: 16,
+        borderRadius: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+        elevation: 6,
+    },
+    actionButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    paidMicroBadge: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
         justifyContent: 'center',
         alignItems: 'center',
     },

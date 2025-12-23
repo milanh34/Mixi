@@ -16,7 +16,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Group, GroupMember } from "../lib/schema";
+import { Group, GroupMember, TravelGroup, GroupExpense } from "../lib/schema";
 
 interface GroupState {
   groups: Group[];
@@ -46,6 +46,12 @@ interface GroupState {
     userPhoto?: string
   ) => Promise<void>;
   leaveGroup: (groupId: string, userId: string) => Promise<void>;
+  removeMember: (
+    groupId: string,
+    adminId: string,
+    memberId: string
+  ) => Promise<void>;
+  setAdmin: (groupId: string, newAdminId: string) => Promise<void>;
 
   setCurrentGroup: (group: Group | null) => void;
   clearError: () => void;
@@ -160,21 +166,38 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     }
   },
 
-  fetchGroup: async (groupId) => {
+  fetchGroup: async (groupId: string) => {
     set({ loading: true, error: null });
     try {
       const groupDoc = await getDoc(doc(db, "groups", groupId));
       if (groupDoc.exists()) {
-        const group = { id: groupDoc.id, ...groupDoc.data() } as Group;
-        set({ currentGroup: group, loading: false });
-        console.log("✅ Fetched group:", group.name);
-      } else {
-        throw new Error("Group not found");
+        const groupData = {
+          id: groupDoc.id,
+          ...groupDoc.data(),
+        } as TravelGroup;
+
+        // Update totalExpenses from actual expenses if not set
+        if (!groupData.totalExpenses || groupData.totalExpenses === 0) {
+          const expensesSnapshot = await getDocs(
+            query(
+              collection(db, "group_expenses"),
+              where("groupId", "==", groupId)
+            )
+          );
+          const totalExpenses = expensesSnapshot.docs.reduce((sum, doc) => {
+            const expense = doc.data() as GroupExpense;
+            return sum + expense.amount;
+          }, 0);
+
+          await updateDoc(doc(db, "groups", groupId), { totalExpenses });
+          groupData.totalExpenses = totalExpenses;
+        }
+
+        set({ currentGroup: groupData, loading: false });
       }
     } catch (error: any) {
       console.error("❌ Fetch group error:", error);
       set({ error: error.message, loading: false });
-      throw error;
     }
   },
 
@@ -315,12 +338,112 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       // Update local state
       set({
         groups: get().groups.filter((g) => g.id !== groupId),
+        currentGroup: null,
         loading: false,
       });
 
       console.log("✅ Left group:", groupId);
     } catch (error: any) {
       console.error("❌ Leave group error:", error);
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+  },
+
+  // ✅ NEW: Remove member (Admin only)
+  removeMember: async (groupId: string, adminId: string, memberId: string) => {
+    set({ loading: true, error: null });
+    try {
+      // Verify admin
+      const groupDoc = await getDoc(doc(db, "groups", groupId));
+      if (!groupDoc.exists()) throw new Error("Group not found");
+
+      const group = groupDoc.data() as Group;
+      if (group.adminId !== adminId) {
+        throw new Error("Only admin can remove members");
+      }
+
+      if (group.adminId === memberId) {
+        throw new Error("Cannot remove admin. Transfer admin first.");
+      }
+
+      // Remove member document
+      await deleteDoc(doc(db, "group_members", `${groupId}_${memberId}`));
+
+      // Update member count
+      const currentCount = group.memberCount || 0;
+      await updateDoc(doc(db, "groups", groupId), {
+        memberCount: Math.max(1, currentCount - 1), // Keep at least 1
+        lastActivity: Timestamp.now(),
+      });
+
+      console.log("✅ Removed member:", memberId, "from group:", groupId);
+      set({ loading: false });
+    } catch (error: any) {
+      console.error("❌ Remove member error:", error);
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+  },
+
+  // ✅ NEW: Transfer admin role
+  setAdmin: async (groupId: string, newAdminId: string) => {
+    set({ loading: true, error: null });
+    try {
+      // Verify current user is admin
+      const groupDoc = await getDoc(doc(db, "groups", groupId));
+      if (!groupDoc.exists()) throw new Error("Group not found");
+
+      const group = groupDoc.data() as Group;
+      const currentAdminId = group.adminId;
+
+      if (currentAdminId !== get().currentGroup?.adminId) {
+        throw new Error("Only current admin can transfer role");
+      }
+
+      // Verify new admin exists in group
+      const newAdminDoc = await getDoc(
+        doc(db, "group_members", `${groupId}_${newAdminId}`)
+      );
+      if (!newAdminDoc.exists()) {
+        throw new Error("Member not found in group");
+      }
+
+      const batch = writeBatch(db);
+
+      // Update group adminId
+      batch.update(doc(db, "groups", groupId), {
+        adminId: newAdminId,
+        lastActivity: Timestamp.now(),
+      });
+
+      // Update old admin role to member
+      batch.update(doc(db, "group_members", `${groupId}_${currentAdminId}`), {
+        role: "member",
+      });
+
+      // Update new admin role to admin
+      batch.update(doc(db, "group_members", `${groupId}_${newAdminId}`), {
+        role: "admin",
+      });
+
+      await batch.commit();
+
+      // Update local state
+      const currentGroup = get().currentGroup;
+      if (currentGroup && currentGroup.id === groupId) {
+        set({
+          currentGroup: {
+            ...currentGroup,
+            adminId: newAdminId,
+          },
+        });
+      }
+
+      console.log("✅ Admin transferred to:", newAdminId);
+      set({ loading: false });
+    } catch (error: any) {
+      console.error("❌ Set admin error:", error);
       set({ error: error.message, loading: false });
       throw error;
     }
