@@ -20,6 +20,33 @@ import { useToast } from '../../utils/toastManager';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 
+const getFirebaseErrorMessage = (errorCode: string): string => {
+  switch (errorCode) {
+    case 'auth/invalid-credential':
+      return 'Invalid email or password. Please check your credentials.';
+    case 'auth/user-not-found':
+      return 'No account found with this email. Please sign up first.';
+    case 'auth/wrong-password':
+      return 'Incorrect password. Please try again.';
+    case 'auth/invalid-email':
+      return 'Invalid email address format.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Contact support.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later.';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your internet connection.';
+    case 'auth/weak-password':
+      return 'Password is too weak. Use at least 6 characters.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists.';
+    case 'auth/operation-not-allowed':
+      return 'Email/password sign-in is disabled. Contact support.';
+    default:
+      return 'Login failed. Please try again.';
+  }
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn, loading } = useAuthStore();
@@ -45,24 +72,18 @@ export default function LoginScreen() {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await signIn(email.trim(), password);
-      
+
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Welcome back!', 'success');
       router.replace('/(tabs)');
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      
-      if (error.code === 'auth/user-not-found') {
-        showToast('No account found with this email', 'error');
-      } else if (error.code === 'auth/wrong-password') {
-        showToast('Incorrect password', 'error');
-      } else if (error.code === 'auth/invalid-email') {
-        showToast('Invalid email address', 'error');
-      } else if (error.code === 'auth/too-many-requests') {
-        showToast('Too many attempts. Please try again later', 'error');
-      } else {
-        showToast(error.message || 'Login failed', 'error');
-      }
+
+      const errorCode = error.code || '';
+      const friendlyMessage = getFirebaseErrorMessage(errorCode);
+      showToast(friendlyMessage, 'error');
+
+      console.error('Login error:', error);
     }
   };
 
@@ -88,7 +109,7 @@ export default function LoginScreen() {
           >
             <MaterialIcons name="receipt-long" size={48} color="#FFFFFF" />
           </LinearGradient>
-          
+
           <MotiView
             from={{ opacity: 0 }}
             animate={{ opacity: 1 }}

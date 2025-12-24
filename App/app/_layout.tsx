@@ -11,6 +11,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { ToastProvider } from '../utils/toastManager';
+import { ToastPortalProvider } from '../components/ui/ToastPortal';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,7 +43,7 @@ export default function RootLayout() {
       await initializeTheme();
       setThemeReady(true);
       await initializeAuth();
-      
+
       if (fontsLoaded && isInitialized) {
         await SplashScreen.hideAsync();
       }
@@ -53,11 +54,11 @@ export default function RootLayout() {
 
   if (!fontsLoaded || !isInitialized || !themeReady || !theme) {
     return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: theme?.colors.background || '#FFFFFF' 
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: theme?.colors.background || '#FFFFFF'
       }}>
         <ActivityIndicator size="large" color={theme?.colors.primary || '#4285F4'} />
       </View>
@@ -67,14 +68,16 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ToastProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth" />
-          <Stack.Screen name="group" />
-          <Stack.Screen name="join-group" />
-          <Stack.Screen name="profile" />
-        </Stack>
+        <ToastPortalProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth" />
+            <Stack.Screen name="group" />
+            <Stack.Screen name="join-group" />
+            <Stack.Screen name="profile" />
+          </Stack>
+        </ToastPortalProvider>
       </ToastProvider>
     </GestureHandlerRootView>
   );

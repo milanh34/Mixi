@@ -17,7 +17,7 @@ import { formatCurrency } from '../../utils/formatCurrency';
 import { getExpenseBalanceText } from '../../utils/balanceCalculator';
 import { getCategoryByIdOrDefault } from '../../utils/expenseCategories';
 import { format } from 'date-fns';
-import { useToast } from '../../utils/toastManager';
+import { useToastPortal } from '../ui/ToastPortal'; 
 
 interface ExpenseItemProps {
     expense: GroupExpense;
@@ -29,7 +29,7 @@ interface ExpenseItemProps {
 export function ExpenseItem({ expense, currentUserId, groupCurrency, onEdit }: ExpenseItemProps) {
     const { theme } = useThemeStore();
     const { markAsPaid, markAsReceived, deleteExpense } = useExpenseStore();
-    const { showToast } = useToast();
+    const { showToast } = useToastPortal();
     const [showDetails, setShowDetails] = useState(false);
 
     const category = getCategoryByIdOrDefault(expense.category);
@@ -67,19 +67,19 @@ export function ExpenseItem({ expense, currentUserId, groupCurrency, onEdit }: E
     };
 
     const handleDelete = () => {
-  showToast(
-    'Delete this expense? This action cannot be undone.',
-    'warning',
-    {
-      confirmAction: async () => {
-        await deleteExpense(expense.id, expense.groupId, currentUserId);
-        showToast('Expense deleted', 'success');
-        setShowDetails(false);
-      },
-      confirmText: 'Delete'
-    }
-  );
-};
+        showToast( 
+            'Delete this expense? This action cannot be undone.',
+            'warning',
+            {
+                confirmAction: async () => {
+                    await deleteExpense(expense.id, expense.groupId, currentUserId);
+                    setShowDetails(false);
+                    showToast('Expense deleted', 'success');
+                },
+                confirmText: 'Delete'
+            }
+        );
+    };
 
     return (
         <>

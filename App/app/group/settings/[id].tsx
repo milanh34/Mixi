@@ -1,648 +1,729 @@
 // app/group/settings/[id].tsx
-import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
   TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useState, useEffect } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useAuthStore } from '../../../stores/authStore';
 import { useThemeStore } from '../../../stores/themeStore';
 import { useGroupStore } from '../../../stores/groupStore';
-import { useAuthStore } from '../../../stores/authStore';
 import { useGroupMembers } from '../../../hooks/useGroupMembers';
-import { useToast } from '../../../utils/toastManager';
+import { useToastPortal } from '../../../components/ui/ToastPortal';
 import { MemberAvatar } from '../../../components/ui/MemberAvatar';
-import { EmptyState } from '../../../components/ui/EmptyState';
-import { getGroupTypeEmoji } from '../../../utils/colors';
+import * as Haptics from 'expo-haptics';
 
-const GROUP_TYPES = ['project', 'household', 'trip', 'couple', 'friends', 'other'] as const;
-const CURRENCIES = ['USD', 'EUR', 'INR', 'GBP', 'CAD', 'AUD'] as const;
-type GroupType = typeof GROUP_TYPES[number];
+const GROUP_TYPES = [
+  { value: 'trip', label: 'Trip', icon: 'flight', emoji: '✈️' },
+  { value: 'project', label: 'Project', icon: 'work', emoji: '💼' },
+  { value: 'household', label: 'Household', icon: 'home', emoji: '🏠' },
+  { value: 'event', label: 'Event', icon: 'event', emoji: '🎉' },
+];
 
 export default function GroupSettingsScreen() {
-  const routerInstance = useRouter();
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuthStore();
   const { theme } = useThemeStore();
-  const {
-    currentGroup,
-    fetchGroup,
-    updateGroup,
-    deleteGroup,
-    leaveGroup,
-    removeMember,
-    setAdmin
-  } = useGroupStore();
+  const { currentGroup, fetchGroup, updateGroup, deleteGroup } = useGroupStore();
   const { members } = useGroupMembers(id as string);
-  const { showToast } = useToast(); // ✅ Toast ready
+  const { showToast } = useToastPortal();
 
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
-  const [groupType, setGroupType] = useState<GroupType>('project');
-  const [currency, setCurrency] = useState('USD');
+  const [groupType, setGroupType] = useState<string>('trip');
 
-  const isAdmin = currentGroup?.adminId === user?.uid;
+  useEffect(() => {
+    if (id) {
+      fetchGroup(id as string);
+    }
+  }, [id]);
 
   useEffect(() => {
     if (currentGroup) {
-      setName(currentGroup.name);
+      setGroupName(currentGroup.name);
       setDescription(currentGroup.description || '');
-      setGroupType((currentGroup.type as GroupType) || 'project');
-      setCurrency(currentGroup.currency);
+      setGroupType(currentGroup.type);
     }
   }, [currentGroup]);
 
+  if (!currentGroup || !user) {
+    return null;
+  }
+
+  const isAdmin = currentGroup.adminId === user.uid;
+  const activeType = GROUP_TYPES.find((t) => t.value === groupType);
+
   const handleSave = async () => {
-    if (!currentGroup) return;
+    if (!groupName.trim()) {
+      showToast('Group name is required', 'error');
+      return;
+    }
+
     try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await updateGroup(currentGroup.id, {
-        name,
-        description,
-        type: groupType,
-        currency,
+        name: groupName.trim(),
+        description: description.trim() || undefined,
+        type: groupType as any,
       });
-      setEditing(false);
       showToast('Group updated successfully!', 'success');
-      await fetchGroup(currentGroup.id);
-    } catch (error: any) {
-      showToast(error.message || 'Failed to update group', 'error');
+      setIsEditing(false);
+    } catch (error) {
+      showToast('Failed to update group', 'error');
     }
   };
 
-  const handleDeleteMember = (memberId: string, memberName: string) => {
+  const handleDelete = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showToast(
-      `Remove ${memberName}?`,
+      `Delete "${currentGroup.name}"? All expenses, notes, and member data will be permanently removed.`,
       'warning',
       {
         confirmAction: async () => {
-          await removeMember(currentGroup!.id, user!.uid, memberId);
-          showToast('Member removed', 'success');
+          try {
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await deleteGroup(currentGroup.id, user.uid);
+            router.replace('/(tabs)');
+            // Show success after navigation
+            setTimeout(() => {
+              showToast('Group deleted successfully', 'success');
+            }, 500);
+          } catch (error) {
+            showToast('Failed to delete group', 'error');
+          }
         },
-        confirmText: 'Remove'
+        confirmText: 'Delete',
       }
     );
   };
 
-  const handleTransferAdmin = (memberId: string, memberName: string) => {
-    showToast(
-      `Transfer admin to ${memberName}?`,
-      'warning',
-      {
-        confirmAction: async () => {
-          await setAdmin(currentGroup!.id, memberId);
-          showToast('Admin transferred!', 'success');
-          routerInstance.back();
-        },
-        confirmText: 'Transfer'
-      }
-    );
+  const formatDate = (timestamp: any): string => {
+    if (!timestamp) return 'Unknown';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
-
-  const handleLeaveGroup = () => {
-    showToast(
-      'Leave this group?',
-      'warning',
-      {
-        confirmAction: async () => {
-          await leaveGroup(currentGroup!.id, user!.uid);
-          showToast('Left group', 'success');
-          routerInstance.back();
-        },
-        confirmText: 'Leave'
-      }
-    );
-  };
-
-  const handleDeleteGroup = () => {
-    showToast(
-      'Delete entire group and all data?',
-      'error',
-      {
-        confirmAction: async () => {
-          await deleteGroup(currentGroup!.id, user!.uid);
-          showToast('Group deleted', 'success');
-          routerInstance.push('/');
-        },
-        confirmText: 'Delete Group'
-      }
-    );
-  };
-
-  if (!currentGroup || !user) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.loading, { color: theme.colors.textPrimary }]}>Loading...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      edges={['top']}
+    >
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity
-          onPress={() => routerInstance.back()}
-          style={[styles.backButton, { backgroundColor: theme.colors.cardBackground }]}
-          activeOpacity={0.7}
-        >
-          <MaterialIcons name="arrow-back" size={24} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.colors.textPrimary }]}>Group Settings</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+      <LinearGradient
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+        style={styles.header}
       >
-        {/* Group Info Section */}
-        <View style={[styles.section, {
-          backgroundColor: theme.colors.cardBackground,
-          borderColor: theme.colors.cardBorder,
-          shadowColor: theme.colors.cardShadow,
-        }]}>
-          <View style={styles.sectionHeader}>
-            <MaterialIcons name="info" size={20} color={theme.colors.primary} />
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              Group Information
-            </Text>
-          </View>
-
-          {/* Name Input */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
-              Group Name
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                editing && styles.inputActive,
-                {
-                  backgroundColor: editing ? theme.colors.surface : theme.colors.cardBackground,
-                  borderColor: editing ? theme.colors.primary : theme.colors.cardBorder,
-                  color: theme.colors.textPrimary
-                }
-              ]}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter group name"
-              editable={isAdmin && editing}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-          </View>
-
-          {/* Description Input */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
-              Description
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                styles.textArea,
-                editing && styles.inputActive,
-                {
-                  backgroundColor: editing ? theme.colors.surface : theme.colors.cardBackground,
-                  borderColor: editing ? theme.colors.primary : theme.colors.cardBorder,
-                  color: theme.colors.textPrimary
-                }
-              ]}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Enter group description"
-              multiline
-              numberOfLines={3}
-              editable={isAdmin && editing}
-              placeholderTextColor={theme.colors.textMuted}
-              textAlignVertical="top"
-            />
-          </View>
-
-          {/* Type Selector */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
-              Group Type
-            </Text>
-            <View style={[styles.selectContainer, {
-              backgroundColor: theme.colors.cardBackground,
-              borderColor: theme.colors.cardBorder
-            }]}>
-              {GROUP_TYPES.map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.selectItem,
-                    groupType === type && styles.selectItemActive
-                  ]}
-                  onPress={() => setGroupType(type)}
-                  disabled={!isAdmin || !editing}
-                  activeOpacity={0.7}
-                >
-                  <MaterialIcons
-                    name="label"
-                    size={16}
-                    color={groupType === type ? theme.colors.primary : theme.colors.textMuted}
-                  />
-                  <Text style={[
-                    styles.selectItemText,
-                    {
-                      color: groupType === type ? theme.colors.textPrimary : theme.colors.textSecondary
-                    }
-                  ]}>
-                    {getGroupTypeEmoji(type)} {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Currency Selector */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
-              Currency
-            </Text>
-            <View style={[styles.selectContainer, {
-              backgroundColor: theme.colors.cardBackground,
-              borderColor: theme.colors.cardBorder
-            }]}>
-              {CURRENCIES.map((curr) => (
-                <TouchableOpacity
-                  key={curr}
-                  style={[
-                    styles.selectItem,
-                    currency === curr && styles.selectItemActive
-                  ]}
-                  onPress={() => setCurrency(curr)}
-                  disabled={!isAdmin || !editing}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[
-                    styles.selectItemText,
-                    {
-                      color: currency === curr ? theme.colors.textPrimary : theme.colors.textSecondary
-                    }
-                  ]}>
-                    {curr}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
+          <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Group Settings</Text>
+          <View style={styles.groupTypeBadge}>
+            <Text style={styles.groupTypeEmoji}>{activeType?.emoji}</Text>
+            <Text style={styles.groupTypeText}>{activeType?.label}</Text>
           </View>
         </View>
+        {isAdmin && !isEditing && (
+          <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editHeaderButton}>
+            <MaterialIcons name="edit" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+        {!isAdmin && <View style={{ width: 40 }} />}
+      </LinearGradient>
 
-        {/* Members Section */}
-        <View style={[styles.section, {
-          backgroundColor: theme.colors.cardBackground,
-          borderColor: theme.colors.cardBorder,
-          shadowColor: theme.colors.cardShadow,
-        }]}>
-          <View style={styles.sectionHeader}>
-            <MaterialIcons name="group" size={20} color={theme.colors.primary} />
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              Members ({members.length})
-            </Text>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Group Info Card */}
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: theme.colors.cardBackground,
+              borderColor: theme.colors.cardBorder,
+            },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={[styles.cardIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                <MaterialIcons name="info-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                Group Information
+              </Text>
+            </View>
           </View>
 
-          {members.length === 0 ? (
-            <EmptyState
-              icon="people-outline"
-              title="No members"
-              description="Group is empty"
-            />
-          ) : (
-            members.map((member) => (
-              <TouchableOpacity
-                key={member.userId}
+          {/* Group Name */}
+          <View style={styles.field}>
+            <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>Group Name</Text>
+            {isEditing ? (
+              <TextInput
                 style={[
-                  styles.memberRow,
+                  styles.fieldInput,
                   {
-                    backgroundColor: theme.colors.cardBackground,
-                    borderColor: theme.colors.cardBorder
-                  }
+                    color: theme.colors.textPrimary,
+                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.cardBorder,
+                  },
                 ]}
-                activeOpacity={0.7}
-              >
-                <MemberAvatar
-                  name={member.userName}
-                  photo={member.userProfilePicture}
-                  size="small"
-                />
-                <View style={styles.memberInfo}>
-                  <Text style={[styles.memberName, { color: theme.colors.textPrimary }]}>
-                    {member.userId === user?.uid ? 'You' : member.userName}
-                  </Text>
-                  <View style={styles.memberRoleContainer}>
-                    <View style={[
-                      styles.roleBadge,
-                      { backgroundColor: member.role === 'admin' ? theme.colors.primary + '10' : theme.colors.surface }
-                    ]}>
-                      <Text style={[
-                        styles.roleText,
-                        { color: member.role === 'admin' ? theme.colors.primary : theme.colors.textSecondary }
-                      ]}>
-                        {member.role === 'admin' ? 'Admin' : 'Member'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                {isAdmin && member.userId !== user?.uid && (
-                  <View style={styles.memberActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionButton,
-                        { backgroundColor: theme.colors.error + '10' }
-                      ]}
-                      onPress={() => handleDeleteMember(member.userId, member.userName)}
-                      activeOpacity={0.7}
-                    >
-                      <MaterialIcons name="remove-circle-outline" size={20} color={theme.colors.error} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionButton,
-                        { backgroundColor: theme.colors.primary + '10' }
-                      ]}
-                      onPress={() => handleTransferAdmin(member.userId, member.userName)}
-                      activeOpacity={0.7}
-                    >
-                      <MaterialIcons name="admin-panel-settings" size={20} color={theme.colors.primary} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
+                value={groupName}
+                onChangeText={setGroupName}
+                placeholder="Enter group name"
+                placeholderTextColor={theme.colors.textMuted}
+              />
+            ) : (
+              <Text style={[styles.fieldValue, { color: theme.colors.textPrimary }]}>
+                {currentGroup.name}
+              </Text>
+            )}
+          </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionsSection}>
-          {isAdmin ? (
-            <>
-              {editing ? (
-                <View style={styles.editActions}>
+          {/* Description */}
+          <View style={styles.field}>
+            <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>Description</Text>
+            {isEditing ? (
+              <TextInput
+                style={[
+                  styles.fieldInput,
+                  styles.fieldTextArea,
+                  {
+                    color: theme.colors.textPrimary,
+                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.cardBorder,
+                  },
+                ]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Add a description (optional)"
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+                numberOfLines={3}
+              />
+            ) : (
+              <Text style={[styles.fieldValue, { color: theme.colors.textSecondary }]}>
+                {currentGroup.description || 'No description'}
+              </Text>
+            )}
+          </View>
+
+          {/* Group Type */}
+          <View style={styles.field}>
+            <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>Group Type</Text>
+            {isEditing ? (
+              <View style={styles.typeGrid}>
+                {GROUP_TYPES.map((type) => (
                   <TouchableOpacity
+                    key={type.value}
                     style={[
-                      styles.actionButtonFull,
-                      styles.cancelButton,
+                      styles.typeOption,
                       {
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.cardBorder
-                      }
+                        backgroundColor:
+                          groupType === type.value
+                            ? theme.colors.primary + '15'
+                            : theme.colors.background,
+                        borderColor:
+                          groupType === type.value ? theme.colors.primary : theme.colors.cardBorder,
+                      },
                     ]}
-                    onPress={() => setEditing(false)}
+                    onPress={() => setGroupType(type.value)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.actionButtonText, { color: theme.colors.textSecondary }]}>
-                      Cancel
+                    <Text style={styles.typeEmoji}>{type.emoji}</Text>
+                    <Text
+                      style={[
+                        styles.typeLabel,
+                        {
+                          color:
+                            groupType === type.value ? theme.colors.primary : theme.colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      {type.label}
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButtonFull,
-                      styles.saveButton,
-                      { backgroundColor: theme.colors.success }
-                    ]}
-                    onPress={handleSave}
-                    activeOpacity={0.7}
-                  >
-                    <MaterialIcons name="check" size={20} color={theme.colors.textInverse} />
-                    <Text style={[styles.actionButtonText, { color: theme.colors.textInverse }]}>
-                      Save Changes
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.actionButtonFull,
-                    styles.editButton,
-                    { backgroundColor: theme.colors.primary }
-                  ]}
-                  onPress={() => setEditing(true)}
-                  activeOpacity={0.7}
-                >
-                  <MaterialIcons name="edit" size={20} color={theme.colors.textInverse} />
-                  <Text style={[styles.actionButtonText, { color: theme.colors.textInverse }]}>
-                    Edit Group
-                  </Text>
-                </TouchableOpacity>
-              )}
+                ))}
+              </View>
+            ) : (
+              <View style={styles.typeDisplay}>
+                <Text style={styles.typeDisplayEmoji}>{activeType?.emoji}</Text>
+                <Text style={[styles.fieldValue, { color: theme.colors.textPrimary }]}>
+                  {activeType?.label}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Currency & Created Date Row */}
+          <View style={styles.infoRow}>
+            <View style={styles.infoItem}>
+              <MaterialIcons name="payments" size={18} color={theme.colors.textMuted} />
+              <View style={styles.infoItemContent}>
+                <Text style={[styles.infoItemLabel, { color: theme.colors.textMuted }]}>
+                  Currency
+                </Text>
+                <Text style={[styles.infoItemValue, { color: theme.colors.textPrimary }]}>
+                  {currentGroup.currency}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.infoItem}>
+              <MaterialIcons name="event" size={18} color={theme.colors.textMuted} />
+              <View style={styles.infoItemContent}>
+                <Text style={[styles.infoItemLabel, { color: theme.colors.textMuted }]}>
+                  Created
+                </Text>
+                <Text style={[styles.infoItemValue, { color: theme.colors.textPrimary }]}>
+                  {formatDate(currentGroup.createdAt)}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Edit Actions */}
+          {isAdmin && isEditing && (
+            <View style={styles.editActions}>
               <TouchableOpacity
                 style={[
-                  styles.actionButtonFull,
-                  styles.dangerButton,
-                  { backgroundColor: theme.colors.error }
+                  styles.editActionButton,
+                  styles.cancelButton,
+                  {
+                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.cardBorder,
+                  },
                 ]}
-                onPress={handleDeleteGroup}
+                onPress={() => {
+                  setIsEditing(false);
+                  setGroupName(currentGroup.name);
+                  setDescription(currentGroup.description || '');
+                  setGroupType(currentGroup.type);
+                }}
                 activeOpacity={0.7}
               >
-                <MaterialIcons name="delete" size={20} color={theme.colors.textInverse} />
-                <Text style={[styles.actionButtonText, { color: theme.colors.textInverse }]}>
-                  Delete Group
+                <Text style={[styles.editActionButtonText, { color: theme.colors.textSecondary }]}>
+                  Cancel
                 </Text>
               </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.actionButtonFull,
-                styles.leaveButton,
-                { backgroundColor: theme.colors.error }
-              ]}
-              onPress={handleLeaveGroup}
-              activeOpacity={0.7}
-            >
-              <MaterialIcons name="exit-to-app" size={20} color={theme.colors.textInverse} />
-              <Text style={[styles.actionButtonText, { color: theme.colors.textInverse }]}>
-                Leave Group
-              </Text>
-            </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.editActionButton,
+                  styles.saveButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}
+                onPress={handleSave}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
+
+        {/* Members Card */}
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: theme.colors.cardBackground,
+              borderColor: theme.colors.cardBorder,
+            },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={[styles.cardIcon, { backgroundColor: theme.colors.secondary + '20' }]}>
+                <MaterialIcons name="people" size={20} color={theme.colors.secondary} />
+              </View>
+              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Members</Text>
+            </View>
+            <View style={[styles.memberCountBadge, { backgroundColor: theme.colors.primary + '15' }]}>
+              <Text style={[styles.memberCountText, { color: theme.colors.primary }]}>
+                {members.length}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.membersList}>
+            {members.map((member, index) => (
+              <View
+                key={member.userId}
+                style={[
+                  styles.memberItem,
+                  {
+                    borderBottomWidth: index < members.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.colors.cardBorder + '50',
+                  },
+                ]}
+              >
+                <MemberAvatar name={member.userName} photo={member.userProfilePicture} size="medium" />
+                <View style={styles.memberItemInfo}>
+                  <View style={styles.memberItemHeader}>
+                    <Text style={[styles.memberName, { color: theme.colors.textPrimary }]}>
+                      {member.userId === user.uid ? 'You' : member.userName}
+                    </Text>
+                    {member.role === 'admin' && (
+                      <View
+                        style={[
+                          styles.adminBadge,
+                          { backgroundColor: theme.colors.primary + '20', borderColor: theme.colors.primary },
+                        ]}
+                      >
+                        <MaterialIcons name="star" size={10} color={theme.colors.primary} />
+                        <Text style={[styles.adminBadgeText, { color: theme.colors.primary }]}>
+                          Admin
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.memberItemFooter}>
+                    <MaterialIcons name="schedule" size={12} color={theme.colors.textMuted} />
+                    <Text style={[styles.memberJoinDate, { color: theme.colors.textMuted }]}>
+                      Joined {formatDate(member.joinedAt)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Danger Zone */}
+        {isAdmin && (
+          <View
+            style={[
+              styles.card,
+              styles.dangerCard,
+              {
+                backgroundColor: theme.colors.error + '08',
+                borderColor: theme.colors.error + '30',
+              },
+            ]}
+          >
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <View style={[styles.cardIcon, { backgroundColor: theme.colors.error + '20' }]}>
+                  <MaterialIcons name="warning" size={20} color={theme.colors.error} />
+                </View>
+                <Text style={[styles.cardTitle, { color: theme.colors.error }]}>Danger Zone</Text>
+              </View>
+            </View>
+
+            <Text style={[styles.dangerDescription, { color: theme.colors.textSecondary }]}>
+              Deleting this group will permanently remove all expenses, notes, and member data. This
+              action cannot be undone.
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.deleteButton,
+                {
+                  backgroundColor: theme.colors.error,
+                },
+              ]}
+              onPress={handleDelete}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="delete-forever" size={20} color="#FFFFFF" />
+              <Text style={styles.deleteButtonText}>Delete Group Permanently</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    borderBottomWidth: 1,
   },
   backButton: {
-    padding: 12,
-    borderRadius: 12,
-    marginRight: 12
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  title: {
+  headerCenter: {
     flex: 1,
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'center'
+    color: '#FFFFFF',
   },
-  headerSpacer: { width: 48, height: 48 },
-  content: { flex: 1 },
-  scrollContent: { paddingBottom: 32 },
-
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-    padding: 24,
-    borderRadius: 20,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  sectionHeader: {
+  groupTypeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 24,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700'
+  groupTypeEmoji: {
+    fontSize: 12,
   },
-
-  inputGroup: { marginBottom: 24 },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 12
+  groupTypeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
-  input: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    fontSize: 16,
+  editHeaderButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  card: {
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 3,
   },
-  inputActive: {
-    shadowOpacity: 0.15,
-    shadowColor: '#000',
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
   },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top'
-  },
-
-  selectContainer: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  selectItem: {
+  cardHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'transparent',
   },
-  selectItemActive: {
-    borderLeftWidth: 4,
+  cardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  selectItemText: {
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  field: {
+    marginBottom: 20,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  fieldValue: {
     fontSize: 16,
-    fontWeight: '600'
+    fontWeight: '600',
+    lineHeight: 22,
   },
-
-  memberRow: {
+  fieldInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  fieldTextArea: {
+    height: 90,
+    textAlignVertical: 'top',
+  },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  typeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    gap: 8,
     paddingHorizontal: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    minWidth: '47%',
   },
-  memberInfo: { flex: 1, marginLeft: 16 },
-  memberName: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4
+  typeEmoji: {
+    fontSize: 20,
   },
-  memberRoleContainer: {
-    flexDirection: 'row',
-  },
-  roleBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  roleText: {
-    fontSize: 12,
+  typeLabel: {
+    fontSize: 14,
     fontWeight: '600',
   },
-  memberActions: {
+  typeDisplay: {
     flexDirection: 'row',
-    gap: 8
+    alignItems: 'center',
+    gap: 10,
   },
-  actionButton: {
-    padding: 12,
-    borderRadius: 12
+  typeDisplayEmoji: {
+    fontSize: 24,
   },
-
-  actionsSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 40
+  infoRow: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  infoItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  infoItemContent: {
+    flex: 1,
+  },
+  infoItemLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  infoItemValue: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   editActions: {
     flexDirection: 'row',
-    gap: 16
+    gap: 10,
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  actionButtonFull: {
+  editActionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 16,
-    marginBottom: 16,
-    gap: 12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
   },
-  editButton: {},
-  saveButton: {},
-  cancelButton: {
-    shadowOpacity: 0.1,
+  cancelButton: {},
+  saveButton: {
+    borderWidth: 0,
   },
-  leaveButton: {},
-  dangerButton: {},
-  actionButtonText: {
-    fontSize: 16,
-    fontWeight: '700'
+  editActionButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
-
-  loadingContainer: {
+  saveButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  memberCountBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  memberCountText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  membersList: {
+    gap: 0,
+  },
+  memberItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  memberItemInfo: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
+    marginLeft: 14,
   },
-  loading: {
+  memberItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  memberName: {
     fontSize: 16,
-    fontWeight: '600'
+    fontWeight: '600',
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  memberItemFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  memberJoinDate: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  dangerCard: {},
+  dangerDescription: {
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

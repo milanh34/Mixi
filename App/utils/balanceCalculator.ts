@@ -139,3 +139,61 @@ export const getExpenseBalanceText = (
     };
   }
 };
+
+export const calculateBalanceDetails = (
+  sharedExpenses: GroupExpense[],
+  members: GroupMember[],
+  currentUserId: string
+): Array<{
+  userId: string;
+  userName: string;
+  userProfilePicture?: string;
+  amount: number; // Positive = they owe you, Negative = you owe them
+}> => {
+  const balanceMap = new Map<string, number>();
+
+  // Initialize all members (except current user)
+  members.forEach(member => {
+    if (member.userId !== currentUserId) {
+      balanceMap.set(member.userId, 0);
+    }
+  });
+
+  // Calculate balances from shared expenses
+  for (const expense of sharedExpenses) {
+    if (expense.settled) continue; // Skip settled expenses
+
+    const currentUserSplit = expense.splitDetails.find(s => s.userId === currentUserId);
+    if (!currentUserSplit) continue;
+
+    if (expense.creatorId === currentUserId) {
+      // Current user paid - calculate what others owe
+      expense.splitDetails.forEach(split => {
+        if (split.userId !== currentUserId && !split.paid) {
+          const current = balanceMap.get(split.userId) || 0;
+          balanceMap.set(split.userId, current + split.exactAmount);
+        }
+      });
+    } else {
+      // Current user owes the payer
+      if (!currentUserSplit.paid) {
+        const current = balanceMap.get(expense.creatorId) || 0;
+        balanceMap.set(expense.creatorId, current - currentUserSplit.exactAmount);
+      }
+    }
+  }
+
+  // Convert to array with user details
+  return Array.from(balanceMap.entries())
+    .filter(([_, amount]) => Math.abs(amount) > 0.01) // Filter negligible amounts
+    .map(([userId, amount]) => {
+      const member = members.find(m => m.userId === userId);
+      return {
+        userId,
+        userName: member?.userName || 'Unknown',
+        userProfilePicture: member?.userProfilePicture,
+        amount,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount); // Sort: highest owed to you first
+};

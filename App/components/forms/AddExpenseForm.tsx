@@ -19,7 +19,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useThemeStore } from '../../stores/themeStore';
 import { useExpenseStore } from '../../stores/expenseStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useToast } from '../../utils/toastManager';
+import { useToastPortal } from '../ui/ToastPortal'; 
 import { useGroupMembers } from '../../hooks/useGroupMembers';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import { EXPENSE_CATEGORIES } from '../../utils/expenseCategories';
@@ -52,7 +52,7 @@ export function AddExpenseForm({
 }: AddExpenseFormProps) {
   const { theme } = useThemeStore();
   const { user } = useAuthStore();
-  const { showToast } = useToast();
+  const { showToast } = useToastPortal();
   const { createExpense, updateExpense, loading } = useExpenseStore();
   const { members } = useGroupMembers(groupId);
   const { pickImage, uploading } = useImagePicker();
@@ -143,7 +143,10 @@ export function AddExpenseForm({
       return;
     }
 
-    if (!user) return;
+    if (!user) {
+      showToast('User not authenticated', 'error');
+      return;
+    }
 
     try {
       const amountNum = parseFloat(amount);
@@ -219,7 +222,7 @@ export function AddExpenseForm({
         await updateExpense(editingExpense.id, groupId, expenseData, user.uid);
         showToast('Expense updated successfully!', 'success');
       } else {
-        await createExpense(expenseData);
+        await createExpense(groupId, user.uid, expenseData);
         showToast('Expense added successfully!', 'success');
       }
 

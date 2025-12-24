@@ -30,13 +30,20 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { AddExpenseForm } from '../../components/forms/AddExpenseForm';
 import { AddEventForm } from '../../components/forms/AddEventForm';
 import { ActivityLog } from '../../components/ui/ActivityLog';
+import { BalanceModal } from '../../components/ui/BalanceModal'; 
 import { getGroupTypeEmoji } from '../../utils/colors';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { calculateRemainingBalance, calculateMemberBalances, calculateUserTotalSpending, calculateSharedTotal } from '../../utils/balanceCalculator';
+import { 
+  calculateRemainingBalance, 
+  calculateMemberBalances, 
+  calculateUserTotalSpending, 
+  calculateSharedTotal,
+  calculateBalanceDetails, 
+} from '../../utils/balanceCalculator';
 import { MotiView } from 'moti';
 import { useNoteStore } from '../../stores/noteStore';
 import { NotesTab } from '../../components/ui/NotesTab';
-import { Note } from '../../lib/schema';
+import * as Haptics from 'expo-haptics'; 
 
 const { height } = Dimensions.get('window');
 const EXPANDED_HEADER_HEIGHT = height * 0.28;
@@ -64,6 +71,7 @@ export default function GroupDetailScreen() {
   const [preselectedExpenseType, setPreselectedExpenseType] = useState<'personal' | 'shared'>('shared');
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showBalanceModal, setShowBalanceModal] = useState(false); 
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -94,6 +102,8 @@ export default function GroupDetailScreen() {
   const remainingBalance = calculateRemainingBalance(sharedExpenses, user?.uid || '');
   const userTotalSpending = calculateUserTotalSpending(allExpenses, user?.uid || '');
 
+  const balanceDetails = calculateBalanceDetails(sharedExpenses, members, user?.uid || '');
+
   // Refresh function
   const onRefresh = useCallback(async () => {
     if (!id || !user?.uid) return;
@@ -105,7 +115,6 @@ export default function GroupDetailScreen() {
         fetchGroupExpenses(id as string),
         fetchGroupTimeline(id as string),
         fetchGroupLogs(id as string, user.uid, expenses),
-        // ✅ NEW: Refresh notes
         useNoteStore.getState().fetchGroupNotes(id as string),
       ]);
       showToast('Refreshed successfully!', 'success');
@@ -138,7 +147,6 @@ export default function GroupDetailScreen() {
   }
 
   const emoji = getGroupTypeEmoji(currentGroup.type);
-
   const personalTotal = personalExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   const handleInvite = () => {
@@ -176,6 +184,11 @@ export default function GroupDetailScreen() {
   const handleEditExpense = (expense: any) => {
     setEditingExpense(expense);
     setShowExpenseForm(true);
+  };
+
+  const handleBalanceCardPress = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowBalanceModal(true);
   };
 
   const filteredExpenses = expenseFilter === 'personal' ? personalExpenses : sharedExpenses;
@@ -428,7 +441,7 @@ export default function GroupDetailScreen() {
               </TouchableOpacity>
             </View>
 
-            <View
+            <TouchableOpacity
               style={[
                 styles.totalCard,
                 {
@@ -436,36 +449,53 @@ export default function GroupDetailScreen() {
                   borderColor: theme.colors.cardBorder,
                 },
               ]}
+              onPress={expenseFilter === 'shared' ? handleBalanceCardPress : undefined}
+              activeOpacity={expenseFilter === 'shared' ? 0.7 : 1}
+              disabled={expenseFilter === 'personal'}
             >
               <Text style={[styles.totalLabel, { color: theme.colors.textSecondary }]}>
                 {expenseFilter === 'personal' ? 'Total Personal Expenses' : 'Your Balance (Remaining)'}
               </Text>
-              <Text
-                style={[
-                  styles.totalValue,
-                  {
-                    color:
-                      expenseFilter === 'personal'
-                        ? theme.colors.textPrimary
-                        : remainingBalance >= 0
-                          ? theme.colors.success
-                          : theme.colors.error,
-                  },
-                ]}
-              >
-                {expenseFilter === 'personal'
-                  ? formatCurrency(personalTotal, currentGroup.currency)
-                  : `${remainingBalance >= 0 ? '+' : ''}${formatCurrency(
-                    Math.abs(remainingBalance),
-                    currentGroup.currency
-                  )}`}
-              </Text>
-              {expenseFilter === 'shared' && (
-                <Text style={[styles.totalSubtext, { color: theme.colors.textMuted }]}>
-                  {remainingBalance >= 0 ? 'You are owed (unpaid)' : 'You owe (unpaid)'}
+              <View style={styles.totalValueRow}>
+                <Text
+                  style={[
+                    styles.totalValue,
+                    {
+                      color:
+                        expenseFilter === 'personal'
+                          ? theme.colors.textPrimary
+                          : remainingBalance >= 0
+                            ? theme.colors.success
+                            : theme.colors.error,
+                    },
+                  ]}
+                >
+                  {expenseFilter === 'personal'
+                    ? formatCurrency(personalTotal, currentGroup.currency)
+                    : `${remainingBalance >= 0 ? '+' : ''}${formatCurrency(
+                      Math.abs(remainingBalance),
+                      currentGroup.currency
+                    )}`}
                 </Text>
+                {expenseFilter === 'shared' && (
+                  <MaterialIcons 
+                    name="chevron-right" 
+                    size={24} 
+                    color={theme.colors.textMuted} 
+                  />
+                )}
+              </View>
+              {expenseFilter === 'shared' && (
+                <View style={styles.totalSubtextRow}>
+                  <Text style={[styles.totalSubtext, { color: theme.colors.textMuted }]}>
+                    {remainingBalance >= 0 ? 'You are owed (unpaid)' : 'You owe (unpaid)'}
+                  </Text>
+                  <Text style={[styles.tapHint, { color: theme.colors.primary }]}>
+                    Tap for details
+                  </Text>
+                </View>
               )}
-            </View>
+            </TouchableOpacity>
 
             {filteredExpenses.length === 0 ? (
               <EmptyState
@@ -590,7 +620,6 @@ export default function GroupDetailScreen() {
         )}
 
         {activeTab === 'notes' && <NotesTab groupId={currentGroup.id} />}
-
       </Animated.ScrollView>
 
       {(activeTab === 'expense' || activeTab === 'timeline') && (
@@ -627,10 +656,17 @@ export default function GroupDetailScreen() {
         groupId={currentGroup.id}
         onClose={() => setShowEventForm(false)}
       />
+
+      <BalanceModal
+        visible={showBalanceModal}
+        onClose={() => setShowBalanceModal(false)}
+        balances={balanceDetails}
+        currency={currentGroup.currency}
+        totalBalance={remainingBalance}
+      />
     </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -880,13 +916,28 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 6,
   },
+  totalValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   totalValue: {
     fontSize: 24,
     fontWeight: '800',
   },
+  totalSubtextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 8,
+  },
   totalSubtext: {
     fontSize: 11,
-    marginTop: 4,
+  },
+  tapHint: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   expenseItemWrapper: {
     marginHorizontal: 16,

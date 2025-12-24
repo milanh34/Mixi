@@ -21,6 +21,33 @@ import { useToast } from '../../utils/toastManager';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 
+const getFirebaseErrorMessage = (errorCode: string): string => {
+  switch (errorCode) {
+    case 'auth/invalid-credential':
+      return 'Invalid email or password. Please check your credentials.';
+    case 'auth/user-not-found':
+      return 'No account found with this email. Please sign up first.';
+    case 'auth/wrong-password':
+      return 'Incorrect password. Please try again.';
+    case 'auth/invalid-email':
+      return 'Invalid email address format.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Contact support.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later.';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your internet connection.';
+    case 'auth/weak-password':
+      return 'Password is too weak. Use at least 6 characters.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists.';
+    case 'auth/operation-not-allowed':
+      return 'Email/password sign-in is disabled. Contact support.';
+    default:
+      return 'Login failed. Please try again.';
+  }
+};
+
 export default function SignUpScreen() {
   const router = useRouter();
   const { signUp, loading } = useAuthStore();
@@ -69,16 +96,12 @@ export default function SignUpScreen() {
       router.replace('/(tabs)');
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      
-      if (error.code === 'auth/email-already-in-use') {
-        showToast('Email already in use', 'error');
-      } else if (error.code === 'auth/invalid-email') {
-        showToast('Invalid email address', 'error');
-      } else if (error.code === 'auth/weak-password') {
-        showToast('Password is too weak', 'error');
-      } else {
-        showToast(error.message || 'Sign up failed', 'error');
-      }
+
+      const errorCode = error.code || '';
+      const friendlyMessage = getFirebaseErrorMessage(errorCode);
+      showToast(friendlyMessage, 'error');
+
+      console.error('Login error:', error);
     }
   };
 
@@ -109,7 +132,7 @@ export default function SignUpScreen() {
             >
               <MaterialIcons name="person-add" size={40} color="#FFFFFF" />
             </LinearGradient>
-            
+
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
               Create Account
             </Text>

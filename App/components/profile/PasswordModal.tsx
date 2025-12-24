@@ -14,7 +14,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useThemeStore } from '../../stores/themeStore';
-import { useToast } from '../../utils/toastManager';
+import { useToastPortal } from '../ui/ToastPortal'; 
 
 interface PasswordModalProps {
   visible: boolean;
@@ -31,7 +31,7 @@ export function PasswordModal({ visible, onClose, onPasswordChange }: PasswordMo
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const { theme } = useThemeStore();
-  const { showToast } = useToast();
+  const { showToast } = useToastPortal();
 
   const handleSubmit = async () => {
     if (!currentPassword.trim()) {

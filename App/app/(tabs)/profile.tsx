@@ -12,21 +12,21 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { auth } from '../lib/firebase';
-import { useAuthStore } from '../stores/authStore';
-import { useGroupStore } from '../stores/groupStore';
-import { useThemeStore } from '../stores/themeStore';
-import { useToast } from '../utils/toastManager';
+import { auth } from '../../lib/firebase';
+import { useAuthStore } from '../../stores/authStore';
+import { useGroupStore } from '../../stores/groupStore';
+import { useThemeStore } from '../../stores/themeStore';
+import { useToast } from '../../utils/toastManager';
 import { Timestamp } from 'firebase/firestore';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ProfileHeader } from '../components/profile/ProfileHeader';
-import { ProfilePhoto } from '../components/profile/ProfilePhoto';
-import { StatsCards } from '../components/profile/StatsCard';
-import { ProfileDetails } from '../components/profile/ProfileDetails';
-import { EditForm } from '../components/profile/EditForm';
-import { PasswordModal } from '../components/profile/PasswordModal';
+import { ProfileHeader } from '../../components/profile/ProfileHeader';
+import { ProfilePhoto } from '../../components/profile/ProfilePhoto';
+import { StatsCards } from '../../components/profile/StatsCard';
+import { ProfileDetails } from '../../components/profile/ProfileDetails';
+import { EditForm } from '../../components/profile/EditForm';
+import { PasswordModal } from '../../components/profile/PasswordModal';
 
 export default function ProfileScreen() {
   const router = useRouter();

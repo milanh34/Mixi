@@ -1,196 +1,174 @@
-// components/ui/Toast.tsx - FULL CONFIRMATION TOAST
-import React, { useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity 
-} from 'react-native';
+// components/ui/Toast.tsx
+import { useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { MotiView } from 'moti';
 import { useThemeStore } from '../../stores/themeStore';
-import * as Haptics from 'expo-haptics';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
-export interface ToastProps {
+interface ToastProps {
   message: string;
   type: ToastType;
-  duration?: number;
   onDismiss: () => void;
   onConfirm?: () => void;
   showConfirm?: boolean;
   confirmText?: string;
 }
 
-export function Toast({ 
-  message, 
-  type, 
-  duration = 4000, 
-  onDismiss, 
-  onConfirm,
-  showConfirm = false, 
-  confirmText = 'Confirm' 
-}: ToastProps) {
+export function Toast({ message, type, onDismiss, onConfirm, showConfirm, confirmText }: ToastProps) {
   const { theme } = useThemeStore();
-  
+  const slideAnim = new Animated.Value(-100);
+
   useEffect(() => {
-    // Haptic feedback
-    if (type === 'success') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else if (type === 'error') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } else {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7,
+    }).start();
+
+    if (!showConfirm) {
+      const timer = setTimeout(() => {
+        handleDismiss();
+      }, 3500);
+
+      return () => clearTimeout(timer);
     }
-  }, [type]);
-  
-  // Auto-dismiss only if NO confirmation needed
-  useEffect(() => {
-    if (showConfirm) return;
-    
-    const timer = setTimeout(() => {
+  }, []);
+
+  const handleDismiss = () => {
+    Animated.timing(slideAnim, {
+      toValue: -100,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
       onDismiss();
-    }, duration);
-    
-    return () => clearTimeout(timer);
-  }, [duration, onDismiss, showConfirm]);
-  
-  const getToastConfig = () => {
+    });
+  };
+
+  const getToastColors = () => {
     switch (type) {
       case 'success':
         return {
-          bg: theme.colors.success,
-          icon: 'check-circle' as const,
+          bg: theme.colors.success + '15',
+          border: theme.colors.success,
+          icon: theme.colors.success,
+          iconName: 'check-circle' as const,
         };
       case 'error':
         return {
-          bg: theme.colors.error,
-          icon: 'error' as const,
+          bg: theme.colors.error + '15',
+          border: theme.colors.error,
+          icon: theme.colors.error,
+          iconName: 'error' as const,
         };
       case 'warning':
         return {
-          bg: theme.colors.warning,
-          icon: 'warning' as const,
+          bg: theme.colors.warning + '15',
+          border: theme.colors.warning,
+          icon: theme.colors.warning,
+          iconName: 'warning' as const,
         };
       case 'info':
         return {
-          bg: theme.colors.info,
-          icon: 'info' as const,
-        };
-      default:
-        return {
-          bg: theme.colors.info,
-          icon: 'info' as const,
+          bg: theme.colors.primary + '15',
+          border: theme.colors.primary,
+          icon: theme.colors.primary,
+          iconName: 'info' as const,
         };
     }
   };
-  
-  const config = getToastConfig();
-  
+
+  const colors = getToastColors();
+
   return (
-    <MotiView
-      from={{ opacity: 0, translateY: -50 }}
-      animate={{ opacity: 1, translateY: 0 }}
-      exit={{ opacity: 0, translateY: -50 }}
-      transition={{ type: 'timing', duration: 300 }}
+    <Animated.View
       style={[
         styles.container,
-        { 
-          backgroundColor: config.bg, 
-          shadowColor: config.bg,
-          minHeight: showConfirm ? 140 : 70,
+        {
+          backgroundColor: colors.bg,
+          borderColor: colors.border,
+          transform: [{ translateY: slideAnim }],
         },
       ]}
     >
-      <View style={styles.content}>
-        <MaterialIcons name={config.icon} size={24} color="#FFFFFF" />
-        <Text style={styles.message} numberOfLines={2}>
-          {message}
-        </Text>
-      </View>
+      <MaterialIcons name={colors.iconName} size={22} color={colors.icon} />
+      <Text style={[styles.message, { color: theme.colors.textPrimary }]}>{message}</Text>
       
-      {showConfirm && (
-        <View style={styles.confirmButtons}>
-          <TouchableOpacity 
-            style={[
-              styles.confirmBtn, 
-              styles.cancelBtn,
-              { backgroundColor: 'rgba(255,255,255,0.15)' }
-            ]} 
-            onPress={onDismiss}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
+      {showConfirm ? (
+        <View style={styles.confirmActions}>
+          <TouchableOpacity onPress={handleDismiss} style={styles.cancelButton} activeOpacity={0.7}>
+            <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>
+              Cancel
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[
-              styles.confirmBtn,
-              { backgroundColor: 'rgba(255,255,255,0.25)' }
-            ]} 
-            onPress={onConfirm}
+          <TouchableOpacity
+            onPress={() => {
+              handleDismiss();
+              onConfirm?.();
+            }}
+            style={[styles.confirmButton, { backgroundColor: colors.border }]}
             activeOpacity={0.7}
           >
-            <Text style={styles.confirmText}>{confirmText}</Text>
+            <Text style={styles.confirmButtonText}>{confirmText || 'Confirm'}</Text>
           </TouchableOpacity>
         </View>
+      ) : (
+        <TouchableOpacity onPress={handleDismiss} activeOpacity={0.7}>
+          <MaterialIcons name="close" size={20} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
       )}
-    </MotiView>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 60,
+    top: Platform.OS === 'ios' ? 60 : 50,
     left: 16,
     right: 16,
-    borderRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 12,
-    zIndex: 9999,
-  },
-  content: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 24,
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 99999, // ✅ High z-index
   },
   message: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
-    lineHeight: 22,
+    lineHeight: 20,
   },
-  confirmButtons: {
+  confirmActions: {
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    paddingBottom: 24,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.15)',
+    gap: 8,
   },
-  confirmBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+  cancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
-  cancelBtn: {},
-  cancelText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  cancelButtonText: {
+    fontSize: 13,
     fontWeight: '600',
   },
-  confirmText: {
+  confirmButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  confirmButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
 });
