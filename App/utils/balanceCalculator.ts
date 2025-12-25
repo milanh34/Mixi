@@ -70,20 +70,27 @@ export const calculateMemberBalances = (
 };
 
 export const calculateUserBalance = (
-  sharedExpenses: GroupExpense[],
+  expenses: GroupExpense[],
   userId: string
 ): number => {
   let balance = 0;
 
-  for (const expense of sharedExpenses) {
+  for (const expense of expenses) {
+    if (expense.type !== "shared" || expense.settled) continue;
+
     const userSplit = expense.splitDetails.find((s) => s.userId === userId);
     if (!userSplit) continue;
 
     if (expense.creatorId === userId) {
-      balance += expense.amount;
-      balance -= userSplit.exactAmount;
+      const totalOwedToUser = expense.splitDetails
+        .filter((s) => s.userId !== userId && !s.paid)
+        .reduce((sum, s) => sum + s.exactAmount, 0);
+
+      balance += totalOwedToUser;
     } else {
-      balance -= userSplit.exactAmount;
+      if (!userSplit.paid) {
+        balance -= userSplit.exactAmount;
+      }
     }
   }
 

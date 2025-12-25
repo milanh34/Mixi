@@ -176,19 +176,19 @@ export const useGroupStore = create<GroupState>((set, get) => ({
           ...groupDoc.data(),
         } as TravelGroup;
 
-        // Update totalExpenses from actual expenses if not set
-        if (!groupData.totalExpenses || groupData.totalExpenses === 0) {
-          const expensesSnapshot = await getDocs(
-            query(
-              collection(db, "group_expenses"),
-              where("groupId", "==", groupId)
-            )
-          );
-          const totalExpenses = expensesSnapshot.docs.reduce((sum, doc) => {
-            const expense = doc.data() as GroupExpense;
-            return sum + expense.amount;
-          }, 0);
+        const expensesSnapshot = await getDocs(
+          query(
+            collection(db, "group_expenses"),
+            where("groupId", "==", groupId)
+          )
+        );
 
+        const totalExpenses = expensesSnapshot.docs.reduce((sum, doc) => {
+          const expense = doc.data() as GroupExpense;
+          return sum + expense.amount;
+        }, 0);
+
+        if (groupData.totalExpenses !== totalExpenses) {
           await updateDoc(doc(db, "groups", groupId), { totalExpenses });
           groupData.totalExpenses = totalExpenses;
         }
