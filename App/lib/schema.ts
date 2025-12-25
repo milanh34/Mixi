@@ -165,4 +165,17 @@ export interface Note {
   lastEdited: Timestamp;
 }
 
+export interface RoutedDebt {
+  id: string;
+  groupId: string;
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  amount: number;
+  originalExpenseId: string;
+  originalCreditor: string;
+  createdAt: Timestamp;
+}
+
 export type Group = TravelGroup;

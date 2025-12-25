@@ -178,7 +178,15 @@ export const useExpenseStore = create<ExpenseState>((set, get) => ({
       const oldExpense = get().expenses.find((e) => e.id === expenseId);
       if (!oldExpense) throw new Error("Expense not found");
 
-      await updateDoc(doc(db, "group_expenses", expenseId), updates);
+      // ✅ FIX: Remove undefined fields from updates
+      const cleanUpdates: any = {};
+      Object.keys(updates).forEach((key) => {
+        if (updates[key as keyof GroupExpense] !== undefined) {
+          cleanUpdates[key] = updates[key as keyof GroupExpense];
+        }
+      });
+
+      await updateDoc(doc(db, "group_expenses", expenseId), cleanUpdates);
 
       const userName = await getUserName(userId);
 
@@ -231,7 +239,7 @@ export const useExpenseStore = create<ExpenseState>((set, get) => ({
 
       set({
         expenses: get().expenses.map((e) =>
-          e.id === expenseId ? { ...e, ...updates } : e
+          e.id === expenseId ? { ...e, ...cleanUpdates } : e
         ),
         loading: false,
       });

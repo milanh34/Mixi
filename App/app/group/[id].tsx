@@ -30,20 +30,21 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { AddExpenseForm } from '../../components/forms/AddExpenseForm';
 import { AddEventForm } from '../../components/forms/AddEventForm';
 import { ActivityLog } from '../../components/ui/ActivityLog';
-import { BalanceModal } from '../../components/ui/BalanceModal'; 
+import { BalanceModal } from '../../components/ui/BalanceModal';
 import { getGroupTypeEmoji } from '../../utils/colors';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { 
-  calculateRemainingBalance, 
-  calculateMemberBalances, 
-  calculateUserTotalSpending, 
+import {
+  calculateRemainingBalance,
+  calculateMemberBalances,
+  calculateUserTotalSpending,
   calculateSharedTotal,
-  calculateBalanceDetails, 
+  calculateBalanceDetails,
 } from '../../utils/balanceCalculator';
 import { MotiView } from 'moti';
 import { useNoteStore } from '../../stores/noteStore';
 import { NotesTab } from '../../components/ui/NotesTab';
-import * as Haptics from 'expo-haptics'; 
+import { SettleDebtsModal } from '../../components/ui/SettleDebtsModal';
+import * as Haptics from 'expo-haptics';
 
 const { height } = Dimensions.get('window');
 const EXPANDED_HEADER_HEIGHT = height * 0.28;
@@ -71,7 +72,8 @@ export default function GroupDetailScreen() {
   const [preselectedExpenseType, setPreselectedExpenseType] = useState<'personal' | 'shared'>('shared');
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [showBalanceModal, setShowBalanceModal] = useState(false); 
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [showSettleDebtsModal, setShowSettleDebtsModal] = useState(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -189,6 +191,23 @@ export default function GroupDetailScreen() {
   const handleBalanceCardPress = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowBalanceModal(true);
+  };
+
+  const handleSettleDebts = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowSettleDebtsModal(true);
+  };
+
+  const handleSettlementComplete = async () => {
+    if (!id || !user?.uid) return;
+
+    await Promise.all([
+      fetchGroup(id as string),
+      fetchGroupExpenses(id as string),
+      fetchGroupLogs(id as string, user.uid, expenses),
+    ]);
+
+    showToast('Debts settled successfully! 🎉', 'success');
   };
 
   const filteredExpenses = expenseFilter === 'personal' ? personalExpenses : sharedExpenses;
@@ -478,10 +497,10 @@ export default function GroupDetailScreen() {
                     )}`}
                 </Text>
                 {expenseFilter === 'shared' && (
-                  <MaterialIcons 
-                    name="chevron-right" 
-                    size={24} 
-                    color={theme.colors.textMuted} 
+                  <MaterialIcons
+                    name="chevron-right"
+                    size={24}
+                    color={theme.colors.textMuted}
                   />
                 )}
               </View>
@@ -496,6 +515,31 @@ export default function GroupDetailScreen() {
                 </View>
               )}
             </TouchableOpacity>
+
+            {expenseFilter === 'shared' && remainingBalance !== 0 && (
+              <MotiView
+                from={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', duration: 400, delay: 100 }}
+                style={styles.settleButtonWrapper}
+              >
+                <TouchableOpacity
+                  onPress={handleSettleDebts}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={[theme.colors.success, theme.colors.success + 'DD']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.settleButton}
+                  >
+                    <MaterialIcons name="handshake" size={20} color="#FFFFFF" />
+                    <Text style={styles.settleButtonText}>Settle Debts</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </MotiView>
+            )}
 
             {filteredExpenses.length === 0 ? (
               <EmptyState
@@ -664,6 +708,18 @@ export default function GroupDetailScreen() {
         currency={currentGroup.currency}
         totalBalance={remainingBalance}
       />
+
+      <SettleDebtsModal
+        visible={showSettleDebtsModal}
+        onClose={() => setShowSettleDebtsModal(false)}
+        expenses={expenses}
+        members={members}
+        currentUserId={user.uid}
+        currency={currentGroup.currency}
+        groupId={currentGroup.id}
+        onSettled={handleSettlementComplete}
+      />
+
     </SafeAreaView>
   );
 }
@@ -1009,5 +1065,27 @@ const styles = StyleSheet.create({
   loading: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  settleButtonWrapper: {
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  settleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  settleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
