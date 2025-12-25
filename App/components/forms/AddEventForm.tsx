@@ -68,25 +68,33 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
 
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      
-      await createEvent({
+
+      const eventData: any = {
         groupId,
         creatorId: user.uid,
         type,
         title: title.trim(),
         description: description.trim(),
         date: Timestamp.now(),
-        location: location.trim()
-          ? { name: location.trim(), lat: 0, lng: 0 }
-          : undefined,
         photos,
-      });
+      };
+
+      if (location.trim()) {
+        eventData.location = {
+          name: location.trim(),
+          lat: 0,
+          lng: 0,
+        };
+      }
+
+      await createEvent(eventData);
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Event added to timeline!', 'success');
       handleClose();
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      console.error('❌ Create timeline event error:', error);
       showToast(error.message || 'Failed to add event', 'error');
     }
   };
@@ -129,11 +137,11 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
             <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
               <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
             </TouchableOpacity>
-            
+
             <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
               Add Timeline Event
             </Text>
-            
+
             <View style={{ width: 40 }} />
           </View>
         </LinearGradient>
@@ -193,47 +201,47 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
                 {EVENT_TYPES.map((eventType, index) => {
                   const eventColor = getEventColor(eventType.id);
                   return (
-                  <TouchableOpacity
-                    key={eventType.id}
-                    style={[
-                      styles.typeButton,
-                      {
-                        backgroundColor:
-                          type === eventType.id
-                            ? eventColor + '20'
-                            : theme.colors.cardBackground,
-                        borderColor:
-                          type === eventType.id
-                            ? eventColor
-                            : theme.colors.cardBorder,
-                      },
-                    ]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setType(eventType.id);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <MaterialIcons
-                      name={eventType.icon as any}
-                      size={24}
-                      color={type === eventType.id ? eventColor : theme.colors.textMuted}
-                    />
-                    <Text
+                    <TouchableOpacity
+                      key={eventType.id}
                       style={[
-                        styles.typeText,
+                        styles.typeButton,
                         {
-                          color:
+                          backgroundColor:
+                            type === eventType.id
+                              ? eventColor + '20'
+                              : theme.colors.cardBackground,
+                          borderColor:
                             type === eventType.id
                               ? eventColor
-                              : theme.colors.textPrimary,
+                              : theme.colors.cardBorder,
                         },
                       ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setType(eventType.id);
+                      }}
+                      activeOpacity={0.7}
                     >
-                      {eventType.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
+                      <MaterialIcons
+                        name={eventType.icon as any}
+                        size={24}
+                        color={type === eventType.id ? eventColor : theme.colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.typeText,
+                          {
+                            color:
+                              type === eventType.id
+                                ? eventColor
+                                : theme.colors.textPrimary,
+                          },
+                        ]}
+                      >
+                        {eventType.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
                 })}
               </View>
             </View>
@@ -320,7 +328,7 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
                   Photos (Optional)
                 </Text>
               </View>
-              
+
               {photos.length > 0 && (
                 <ScrollView
                   horizontal
@@ -398,7 +406,7 @@ export function AddEventForm({ visible, groupId, onClose }: AddEventFormProps) {
                   </Text>
                 </TouchableOpacity>
               </View>
-              
+
               {uploading && (
                 <View style={styles.uploadingContainer}>
                   <ActivityIndicator size="small" color={theme.colors.primary} />

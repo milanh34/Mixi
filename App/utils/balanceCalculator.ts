@@ -1,4 +1,4 @@
-// utils/balanceCalculator.ts - Complete corrected version
+// utils/balanceCalculator.ts
 import { GroupExpense, GroupMember } from '../lib/schema';
 
 export const calculateSharedTotal = (

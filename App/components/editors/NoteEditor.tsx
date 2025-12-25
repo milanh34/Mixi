@@ -10,6 +10,7 @@ import {
   Platform,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -45,6 +46,7 @@ export function NoteEditor({
   const [checklist, setChecklist] = useState<ChecklistItem[]>(
     note?.checklist || []
   );
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible && note) {
@@ -135,6 +137,8 @@ export function NoteEditor({
       syncedVersion: note ? (note.syncedVersion || 0) + 1 : 1,
     };
 
+    setSaving(true);
+
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -153,6 +157,8 @@ export function NoteEditor({
     } catch (e) {
       console.error('Error saving note', e);
       showToast('Failed to save note', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -229,8 +235,19 @@ export function NoteEditor({
                   <MaterialIcons name="delete-outline" size={22} color={theme.colors.error} />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-                <MaterialIcons name="check" size={20} color="#FFFFFF" />
+              <TouchableOpacity
+                onPress={handleSave}
+                style={[
+                  styles.saveButton,
+                  saving && { opacity: 0.6 }
+                ]}
+                disabled={saving} 
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <MaterialIcons name="check" size={20} color="#FFFFFF" />
+                )}
               </TouchableOpacity>
             </View>
           </View>

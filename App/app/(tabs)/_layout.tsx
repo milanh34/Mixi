@@ -4,9 +4,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { Image } from 'react-native';
 
 export default function TabLayout() {
-  const { isAuthenticated, isInitialized } = useAuthStore();
+  const { isAuthenticated, isInitialized, user } = useAuthStore();
   const { theme } = useThemeStore();
   const segments = useSegments();
   const router = useRouter();
@@ -40,7 +41,7 @@ export default function TabLayout() {
           backgroundColor: theme.colors.cardBackground,
           borderTopColor: theme.colors.border,
           borderTopWidth: 1,
-          height: 60,
+          height: 80,
           paddingBottom: 8,
           paddingTop: 8,
           shadowColor: theme.colors.cardShadow,
@@ -77,9 +78,22 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: "Profile",
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="account-circle" size={size} color={color} />
+            user?.profilePicture ? (
+              <Image
+                source={{ uri: user.profilePicture }}
+                style={{
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  borderWidth: 2,
+                  borderColor: color
+                }}
+              />
+            ) : (
+              <MaterialIcons name="account-circle" size={size} color={color} />
+            )
           ),
         }}
       />

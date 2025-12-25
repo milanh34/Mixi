@@ -23,14 +23,16 @@ import { MotiView } from 'moti';
 import { Group } from '../../lib/schema';
 import * as Haptics from 'expo-haptics';
 
-const GROUP_TYPES: Group['type'][] = ['trip', 'project', 'household', 'event'];
-const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD'];
+const GROUP_TYPES: Group['type'][] = ['trip', 'project', 'event', 'shopping', 'dayout', 'household', 'other'];
 
 const TYPE_ICONS: Record<Group['type'], keyof typeof MaterialIcons.glyphMap> = {
   trip: 'flight',
   project: 'work',
-  household: 'home',
   event: 'event',
+  shopping: 'shopping-bag',
+  dayout: 'wb-sunny',
+  household: 'home',
+  other: 'more-horiz',
 };
 
 export default function CreateGroupScreen() {
@@ -43,7 +45,7 @@ export default function CreateGroupScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<Group['type']>('trip');
-  const [currency, setCurrency] = useState('INR');
+  const currency = 'INR';
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -212,55 +214,6 @@ export default function CreateGroupScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
-
-            {/* Currency */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
-                Currency
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.currencyRow}
-              >
-                {CURRENCIES.map((curr) => (
-                  <TouchableOpacity
-                    key={curr}
-                    style={[
-                      styles.currencyButton,
-                      {
-                        backgroundColor:
-                          currency === curr
-                            ? theme.colors.primary
-                            : theme.colors.cardBackground,
-                        borderColor:
-                          currency === curr
-                            ? theme.colors.primary
-                            : theme.colors.cardBorder,
-                      },
-                    ]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setCurrency(curr);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.currencyText,
-                        {
-                          color:
-                            currency === curr ? '#FFFFFF' : theme.colors.textPrimary,
-                          fontWeight: currency === curr ? '700' : '600',
-                        },
-                      ]}
-                    >
-                      {curr}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
             </View>
           </MotiView>
         </ScrollView>

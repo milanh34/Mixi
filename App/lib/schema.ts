@@ -30,10 +30,10 @@ export interface TravelGroup {
   id: string;
   name: string;
   description?: string;
-  type: 'trip' | 'household' | 'couple' | 'friends' | 'project' | 'other';
+  type: 'trip' | 'project' | 'event' | 'shopping' | 'dayout' | 'household' | 'other';
   adminId: string;
   memberCount: number;
-  currency: string;
+  currency: 'INR';
   photo?: string;
   inviteCode: string;
   totalExpenses: number;

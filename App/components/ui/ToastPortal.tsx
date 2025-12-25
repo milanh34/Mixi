@@ -67,8 +67,6 @@ export function ToastPortalProvider({ children }: { children: ReactNode }) {
   return (
     <ToastPortalContext.Provider value={{ showToast }}>
       {children}
-      
-      {/* ✅ Portal Modal for Toast - Renders ABOVE everything */}
       <Modal
         visible={!!toast}
         transparent
@@ -96,8 +94,6 @@ export function ToastPortalProvider({ children }: { children: ReactNode }) {
 const styles = StyleSheet.create({
   portalContainer: {
     flex: 1,
-    position: 'relative',
-    zIndex: 99999,
-    elevation: 99999,
+    pointerEvents: 'box-none',
   },
 });

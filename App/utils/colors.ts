@@ -5,10 +5,13 @@ export const getGroupTypeEmoji = (type: string): string => {
   const emojis: Record<string, string> = {
     trip: '✈️',
     project: '💼',
-    household: '🏠',
     event: '🎉',
+    shopping: '🛍️',
+    dayout: '🌤️',
+    household: '🏠',
+    other: '📌',
   };
-  return emojis[type] || '📁';
+  return emojis[type] || '📌';
 };
 
 export const getGradientColors = (primaryColor: string): readonly [string, string, string] => {

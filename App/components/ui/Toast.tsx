@@ -50,28 +50,28 @@ export function Toast({ message, type, onDismiss, onConfirm, showConfirm, confir
     switch (type) {
       case 'success':
         return {
-          bg: theme.colors.success + '15',
+          bg: theme.colors.successLight,
           border: theme.colors.success,
           icon: theme.colors.success,
           iconName: 'check-circle' as const,
         };
       case 'error':
         return {
-          bg: theme.colors.error + '15',
+          bg: theme.colors.errorLight,
           border: theme.colors.error,
           icon: theme.colors.error,
           iconName: 'error' as const,
         };
       case 'warning':
         return {
-          bg: theme.colors.warning + '15',
+          bg: theme.colors.warningLight,
           border: theme.colors.warning,
           icon: theme.colors.warning,
           iconName: 'warning' as const,
         };
       case 'info':
         return {
-          bg: theme.colors.primary + '15',
+          bg: theme.colors.infoLight,
           border: theme.colors.primary,
           icon: theme.colors.primary,
           iconName: 'info' as const,
@@ -82,47 +82,60 @@ export function Toast({ message, type, onDismiss, onConfirm, showConfirm, confir
   const colors = getToastColors();
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.bg,
-          borderColor: colors.border,
-          transform: [{ translateY: slideAnim }],
-        },
-      ]}
-    >
-      <MaterialIcons name={colors.iconName} size={22} color={colors.icon} />
-      <Text style={[styles.message, { color: theme.colors.textPrimary }]}>{message}</Text>
-      
-      {showConfirm ? (
-        <View style={styles.confirmActions}>
-          <TouchableOpacity onPress={handleDismiss} style={styles.cancelButton} activeOpacity={0.7}>
-            <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>
-              Cancel
-            </Text>
+    <View style={styles.wrapper} pointerEvents="box-none">
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            transform: [{ translateY: slideAnim }],
+            backgroundColor: colors.bg,
+            borderColor: colors.border,
+          },
+        ]}
+        pointerEvents="auto"
+      >
+        <MaterialIcons name={colors.iconName} size={22} color={colors.icon} />
+        <Text style={[styles.message, { color: theme.colors.textPrimary }]}>{message}</Text>
+
+        {showConfirm ? (
+          <View style={styles.confirmActions}>
+            <TouchableOpacity onPress={handleDismiss} style={styles.cancelButton} activeOpacity={0.7}>
+              <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                handleDismiss();
+                onConfirm?.();
+              }}
+              style={[styles.confirmButton, { backgroundColor: colors.border }]}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.confirmButtonText}>{confirmText || 'Confirm'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={handleDismiss} activeOpacity={0.7}>
+            <MaterialIcons name="close" size={20} color={theme.colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              handleDismiss();
-              onConfirm?.();
-            }}
-            style={[styles.confirmButton, { backgroundColor: colors.border }]}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.confirmButtonText}>{confirmText || 'Confirm'}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <TouchableOpacity onPress={handleDismiss} activeOpacity={0.7}>
-          <MaterialIcons name="close" size={20} color={theme.colors.textSecondary} />
-        </TouchableOpacity>
-      )}
-    </Animated.View>
+        )}
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 99999,
+    elevation: 99999,
+  },
+
   container: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 60 : 50,
@@ -140,32 +153,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 10,
-    zIndex: 99999, // ✅ High z-index
   },
+
   message: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
   },
+
   confirmActions: {
     flexDirection: 'row',
     gap: 8,
   },
+
   cancelButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
+
   cancelButtonText: {
     fontSize: 13,
     fontWeight: '600',
   },
+
   confirmButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
+
   confirmButtonText: {
     color: '#FFFFFF',
     fontSize: 13,

@@ -24,8 +24,11 @@ import * as Haptics from 'expo-haptics';
 const GROUP_TYPES = [
   { value: 'trip', label: 'Trip', icon: 'flight', emoji: '✈️' },
   { value: 'project', label: 'Project', icon: 'work', emoji: '💼' },
-  { value: 'household', label: 'Household', icon: 'home', emoji: '🏠' },
   { value: 'event', label: 'Event', icon: 'event', emoji: '🎉' },
+  { value: 'shopping', label: 'Shopping', icon: 'shopping-bag', emoji: '🛍️' },
+  { value: 'dayout', label: 'Day Out', icon: 'wb-sunny', emoji: '🌤️' },
+  { value: 'household', label: 'Household', icon: 'home', emoji: '🏠' },
+  { value: 'other', label: 'Other', icon: 'more-horiz', emoji: '📌' },
 ];
 
 export default function GroupSettingsScreen() {
@@ -269,18 +272,6 @@ export default function GroupSettingsScreen() {
 
           {/* Currency & Created Date Row */}
           <View style={styles.infoRow}>
-            <View style={styles.infoItem}>
-              <MaterialIcons name="payments" size={18} color={theme.colors.textMuted} />
-              <View style={styles.infoItemContent}>
-                <Text style={[styles.infoItemLabel, { color: theme.colors.textMuted }]}>
-                  Currency
-                </Text>
-                <Text style={[styles.infoItemValue, { color: theme.colors.textPrimary }]}>
-                  {currentGroup.currency}
-                </Text>
-              </View>
-            </View>
-
             <View style={styles.infoItem}>
               <MaterialIcons name="event" size={18} color={theme.colors.textMuted} />
               <View style={styles.infoItemContent}>
